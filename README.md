@@ -19,10 +19,10 @@
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `OPENAI_MODEL` | `gpt-5.4-mini` | 模型型号，需支持结构化输出；可用列表 `curl https://api.openai.com/v1/models` |
+| `OPENAI_MODEL` | `gpt-5.6-terra` | 模型型号，需支持结构化输出；选型看免费额度分组（`docs/design.md` 第 12 节） |
 | `OPENAI_REASONING_EFFORT` | `medium` | 推理强度 `low` / `medium` / `high`，越高越慢越贵 |
-| `MAX_FILE_DIFF_LINES` | `800` | 单文件改动行数超过即跳过，summary 里会列出 |
-| `MAX_TOTAL_DIFF_CHARS` | `240000` | 单次审查喂给模型的 diff 总字符上限，超出的文件跳过 |
+| `MAX_FILE_DIFF_LINES` | `2000` | 单文件改动行数超过即跳过，summary 里会列出 |
+| `MAX_TOTAL_DIFF_CHARS` | `480000` | 单次审查喂给模型的 diff 总字符上限，超出的文件跳过 |
 
 需要改代码的项：
 

@@ -8,10 +8,10 @@ enabled = true
 
 [vars]
 GITHUB_APP_ID = "4845701"
-OPENAI_MODEL = "gpt-5.4-mini"
+OPENAI_MODEL = "gpt-5.6-terra"
 OPENAI_REASONING_EFFORT = "medium"
-MAX_FILE_DIFF_LINES = "800"
-MAX_TOTAL_DIFF_CHARS = "240000"
+MAX_FILE_DIFF_LINES = "2000"
+MAX_TOTAL_DIFF_CHARS = "480000"
 
 [[kv_namespaces]]
 binding = "STATE"
