@@ -7,7 +7,7 @@ workers_dev = true
 enabled = true
 
 [vars]
-GITHUB_APP_ID = ""
+GITHUB_APP_ID = "4845701"
 OPENAI_MODEL = "gpt-5.4-mini"
 OPENAI_REASONING_EFFORT = "medium"
 MAX_FILE_DIFF_LINES = "800"

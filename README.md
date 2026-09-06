@@ -2,7 +2,7 @@
 
 自建的 GitHub PR 审查机器人：GitHub App 形态，装到账号下全部仓库，PR 打开或更新时用 OpenAI 审 diff，把 summary 和 inline 意见回写到 PR，并跟踪上一轮意见是否已处理。
 
-评论区显示为 `codeseer[bot]`。
+评论区显示为 `codeseerbot[bot]`（GitHub App 名不能与已有账号同名，`codeseer` 已被占）。
 
 ## 为什么自己做
 
@@ -15,4 +15,4 @@
 
 ## 状态
 
-设计定稿，实现未开始。
+第一版实现完成，Worker 已部署，App 已创建，验证中。
