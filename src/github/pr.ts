@@ -64,6 +64,11 @@ export class PullRequestApi {
         return this.gh.rest<string>("GET", `${this.base}/pulls/${number}`, { accept: DIFF_ACCEPT });
     }
 
+    async fileContent(path: string, ref: string): Promise<string> {
+        const encoded = path.split("/").map(encodeURIComponent).join("/");
+        return this.gh.rest<string>("GET", `${this.base}/contents/${encoded}?ref=${ref}`, { accept: "application/vnd.github.raw" });
+    }
+
     async compareDiff(from: string, to: string): Promise<string | null> {
         try {
             return await this.gh.rest<string>("GET", `${this.base}/compare/${from}...${to}`, { accept: DIFF_ACCEPT });

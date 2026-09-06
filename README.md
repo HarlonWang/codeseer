@@ -22,11 +22,14 @@
 | `OPENAI_MODEL` | `gpt-5.6-terra` | 模型型号，需支持结构化输出；选型看免费额度分组（`docs/design.md` 第 12 节） |
 | `OPENAI_REASONING_EFFORT` | `medium` | 推理强度 `low` / `medium` / `high`，越高越慢越贵 |
 | `MAX_FILE_DIFF_LINES` | `2000` | 单文件改动行数超过即跳过，summary 里会列出 |
-| `MAX_TOTAL_DIFF_CHARS` | `480000` | 单次审查喂给模型的 diff 总字符上限，超出的文件跳过 |
+| `MAX_TOTAL_DIFF_CHARS` | `480000` | 单次审查喂给模型的代码总字符上限。超出时先把最大的文件退回只喂 diff，仍超出的文件跳过，两种情况 summary 里都会列出 |
+| `FULL_FILE_MAX_LINES` | `1000` | 改动过的代码文件不超过这个行数就喂全文，超过则只喂每个改动点上下 `CONTEXT_WINDOW_LINES` 行的片段 |
+| `CONTEXT_WINDOW_LINES` | `150` | 片段模式下每个改动点上下各保留的行数 |
 
 需要改代码的项：
 
 - 忽略规则：`src/review/ignore.ts`
+- 只喂 diff 不喂全文的文件类型（文档、资源、配置）：`src/review/select.ts` 的 `DIFF_ONLY`
 - 审查口径与评论语言：`src/review/prompt.ts` 的 `SYSTEM_PROMPT`
 - 触发事件：`src/github/webhook.ts` 的 `TRIGGER_ACTIONS`
 
