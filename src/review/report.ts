@@ -50,7 +50,7 @@ export interface ReportInput {
     carried: TrackedFinding[];
     overflow: ModelFinding[];
     skipped: SkippedFile[];
-    degraded: string[];
+    degraded: SkippedFile[];
 }
 
 function excerpt(s: string, n = 80): string {
@@ -77,8 +77,8 @@ export function composeReviewBody(input: ReportInput): string {
         parts.push(`### 其他意见\n不在改动行上，无法挂为行内评论：\n${lines.join("\n")}`);
     }
     if (input.degraded.length > 0) {
-        const lines = input.degraded.map((p) => `- \`${p}\``);
-        parts.push(`### 只按 diff 审查的文件\n本次总量超过上限，以下文件没有附全文：\n${lines.join("\n")}`);
+        const lines = input.degraded.map((d) => `- \`${d.path}\`：${d.reason}`);
+        parts.push(`### 只按 diff 审查的文件\n${lines.join("\n")}`);
     }
     if (input.skipped.length > 0) {
         const lines = input.skipped.map((s) => `- \`${s.path}\`：${s.reason}`);

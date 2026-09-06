@@ -48,7 +48,7 @@ describe("composeReviewBody", () => {
             carried: [{ threadId: "t2", path: "b.ts", line: 5, comment: "still open" }],
             overflow: [{ path: "c.ts", line: 99, severity: "medium", comment: "somewhere" }],
             skipped: [{ path: "package-lock.json", reason: "lock 文件" }],
-            degraded: ["big.kt"],
+            degraded: [{ path: "big.kt", reason: "本次审查总量已达上限" }],
         });
         expect(body).toContain("**上轮意见**：2 条，已处理 1 条，待处理 1 条");
         expect(body).toContain("- `b.ts:5` still open");
@@ -57,7 +57,7 @@ describe("composeReviewBody", () => {
         expect(body).toContain("`c.ts:99` **[建议]** somewhere");
         expect(body).toContain("`package-lock.json`：lock 文件");
         expect(body).toContain("### 只按 diff 审查的文件");
-        expect(body).toContain("- `big.kt`");
+        expect(body).toContain("- `big.kt`：本次审查总量已达上限");
         expect(body).toContain("增量 aaaaaaa..bbbbbbb");
     });
 });
@@ -102,8 +102,22 @@ describe("ignore and select", () => {
 
     it("falls back to diff when the source does not match the hunk", () => {
         const files = parseDiff(`${modified("a.kt")}\n`);
-        const { selected } = selectFiles(files, limits({}), new Map([["a.kt", "x\ny\nz"]]));
+        const { selected, degraded } = selectFiles(files, limits({}), new Map([["a.kt", "x\ny\nz"]]));
         expect(selected[0].context).toBe("diff");
+        expect(degraded).toEqual([{ path: "a.kt", reason: "文件内容与 diff 不符" }]);
+        expect(selectFiles(files, limits({})).degraded).toEqual([{ path: "a.kt", reason: "源文件未拉到" }]);
+    });
+
+    it("does not degrade a file whose full text is no longer than its diff", () => {
+        const whole = ["diff --git a/w.kt b/w.kt", "--- a/w.kt", "+++ b/w.kt", "@@ -1,2 +1,2 @@", "-a", "-b", "+x", "+y"].join("\n");
+        const files = parseDiff(`${whole}\n`);
+        const sources = new Map([["w.kt", "x\ny\n"]]);
+        const roomy = selectFiles(files, limits({}), sources);
+        expect(roomy.selected[0].context).toBe("full");
+        const tight = selectFiles(files, limits({ maxTotalDiffChars: roomy.selected[0].text.length - 1 }), sources);
+        expect(tight.selected).toEqual([]);
+        expect(tight.degraded).toEqual([]);
+        expect(tight.skipped[0].reason).toBe("本次审查总量已达上限");
     });
 
     it("degrades the largest full files first when over the total budget", () => {
@@ -117,7 +131,7 @@ describe("ignore and select", () => {
             ["small.kt", "full"],
             ["big.kt", "diff"],
         ]);
-        expect(tight.degraded).toEqual(["big.kt"]);
+        expect(tight.degraded).toEqual([{ path: "big.kt", reason: "本次审查总量已达上限" }]);
         expect(tight.skipped).toEqual([]);
     });
 });

@@ -104,17 +104,24 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     console.log(`${tag}: posted ${comments.length} inline, resolved ${resolved.length}, carried ${carried.length + stillOpen.length}`);
 }
 
+const FETCH_CONCURRENCY = 6;
+const MAX_SOURCE_CHARS = 1_000_000;
+
 async function fetchSources(api: PullRequestApi, files: DiffFile[], ref: string, tag: string): Promise<Map<string, string>> {
     const out = new Map<string, string>();
-    await Promise.all(
-        files.map(async (f) => {
+    const queue = [...files];
+    const worker = async () => {
+        for (let f = queue.shift(); f; f = queue.shift()) {
             try {
-                out.set(f.path, await api.fileContent(f.path, ref));
+                const text = await api.fileContent(f.path, ref);
+                if (text.length > MAX_SOURCE_CHARS) console.error(`${tag}: skip source ${f.path}: ${text.length} chars`);
+                else out.set(f.path, text);
             } catch (e) {
                 console.error(`${tag}: fetch ${f.path} failed: ${e instanceof Error ? e.message : String(e)}`);
             }
-        }),
-    );
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, queue.length) }, worker));
     return out;
 }
 
