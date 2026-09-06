@@ -35,7 +35,7 @@ export interface PullRequestEvent {
     };
 }
 
-const TRIGGER_ACTIONS = new Set(["opened", "synchronize", "ready_for_review"]);
+const TRIGGER_ACTIONS = new Set(["opened", "reopened", "synchronize", "ready_for_review"]);
 
 export function triggerReason(event: string, payload: PullRequestEvent): { skip: string } | { ok: true } {
     if (event !== "pull_request") return { skip: `event ${event}` };

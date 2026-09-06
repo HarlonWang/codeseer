@@ -25,5 +25,5 @@ queue = "codeseer-review"
 queue = "codeseer-review"
 max_batch_size = 1
 max_retries = 2
-max_concurrency = 2
+max_concurrency = 1
 dead_letter_queue = "codeseer-review-dlq"

@@ -28,8 +28,9 @@ function event(over: Partial<PullRequestEvent["pull_request"]> = {}, action = "o
 }
 
 describe("triggerReason", () => {
-    it("reviews opened, synchronize and ready_for_review", () => {
+    it("reviews opened, reopened, synchronize and ready_for_review", () => {
         expect(triggerReason("pull_request", event())).toEqual({ ok: true });
+        expect(triggerReason("pull_request", event({}, "reopened"))).toEqual({ ok: true });
         expect(triggerReason("pull_request", event({}, "synchronize"))).toEqual({ ok: true });
         expect(triggerReason("pull_request", event({}, "ready_for_review"))).toEqual({ ok: true });
     });
