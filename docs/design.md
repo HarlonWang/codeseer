@@ -74,10 +74,10 @@ webhook Worker 和 consumer 放同一个 Worker 项目，靠 queue 绑定区分 
 | 安装范围 | HarlonWang 账号，All repositories |
 | 订阅事件 | Pull request |
 | 权限 Pull requests | Read & write（读 PR、提交 review、resolve thread） |
-| 权限 Contents | Read（拉 diff 与 compare） |
+| 权限 Contents | Read & write（拉 diff 与 compare 只需 Read；`resolveReviewThread` 要求 Contents 写权限，2026-09-06 实测只给 Pull requests 写权限会报 Resource not accessible by integration） |
 | 权限 Metadata | Read（必选） |
 
-权限按最小集申请，之后要加再改。
+权限按最小集申请，之后要加再改。Contents 写权限是被 resolve 接口逼出来的，代码里没有任何写 Contents 的调用。
 
 鉴权链：App 私钥签 JWT，用 JWT 换取该安装的 installation token（有效 1 小时），后续 REST 与 GraphQL 都用它。单租户下 installation id 固定，但仍从 webhook payload 里取，不写死。
 
@@ -173,7 +173,7 @@ App slug 用 `codeseerbot`：GitHub 不允许 App 名与任何已有账号同名
 ## 13. 本地开发
 
 - webhook 用 smee.io 一类工具转发到本机 `wrangler dev`
-- 先用一个测试仓库单独安装 App 验证全链路，再改成 All repositories
+- 首次验证用的是本仓自己的 PR #1：机器人审自己的代码，提的意见修掉后 push，顺带验证增量审与 resolve
 
 ## 14. 待定
 
