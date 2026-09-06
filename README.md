@@ -9,6 +9,39 @@
 - 现有收费审查工具对私有仓库有限制，或只给试用期
 - 想要一处安装、全仓生效，不在每个仓库里维护 workflow 文件
 
+## 用法
+
+装好后无需任何操作：账号下任何仓库开 PR、push 新 commit、草稿转正式或重开 PR，`codeseerbot[bot]` 都会来审。草稿 PR 和机器人发起的 PR（如 dependabot）不审。
+
+### 配置
+
+可调项都在 `wrangler.toml` 的 `[vars]` 里，改完 `npm run deploy` 生效：
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `OPENAI_MODEL` | `gpt-5.4-mini` | 模型型号，需支持结构化输出；可用列表 `curl https://api.openai.com/v1/models` |
+| `OPENAI_REASONING_EFFORT` | `medium` | 推理强度 `low` / `medium` / `high`，越高越慢越贵 |
+| `MAX_FILE_DIFF_LINES` | `800` | 单文件改动行数超过即跳过，summary 里会列出 |
+| `MAX_TOTAL_DIFF_CHARS` | `240000` | 单次审查喂给模型的 diff 总字符上限，超出的文件跳过 |
+
+需要改代码的项：
+
+- 忽略规则：`src/review/ignore.ts`
+- 审查口径与评论语言：`src/review/prompt.ts` 的 `SYSTEM_PROMPT`
+- 触发事件：`src/github/webhook.ts` 的 `TRIGGER_ACTIONS`
+
+Secrets 三样走 `npx wrangler secret put <NAME>`：`GITHUB_PRIVATE_KEY`、`GITHUB_WEBHOOK_SECRET`、`OPENAI_API_KEY`。
+
+### 运维
+
+```bash
+npx wrangler tail codeseer --format pretty              # 实时日志，含每次审查的 token 用量
+npx wrangler kv key get --binding STATE --remote "owner/repo#123"   # 某个 PR 的审查状态
+npx wrangler queues purge codeseer-review-dlq            # 清理死信队列
+```
+
+某个 PR 想让它重审整个 diff：删掉该 PR 的 KV 记录后 push 一个 commit 即可。
+
 ## 文档
 
 - `docs/design.md` 方案与已定决策，开工前先读
