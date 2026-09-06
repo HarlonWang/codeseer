@@ -1,0 +1,29 @@
+name = "codeseer"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+GITHUB_APP_ID = ""
+OPENAI_MODEL = "gpt-5.4-mini"
+OPENAI_REASONING_EFFORT = "medium"
+MAX_FILE_DIFF_LINES = "800"
+MAX_TOTAL_DIFF_CHARS = "240000"
+
+[[kv_namespaces]]
+binding = "STATE"
+id = "bb3cbb2f1d32421c9c6f00e01eb8be9d"
+
+[[queues.producers]]
+binding = "REVIEW_QUEUE"
+queue = "codeseer-review"
+
+[[queues.consumers]]
+queue = "codeseer-review"
+max_batch_size = 1
+max_retries = 2
+max_concurrency = 2
+dead_letter_queue = "codeseer-review-dlq"
