@@ -65,7 +65,7 @@ export function composeReviewBody(input: ReportInput): string {
         const lines = [`**上轮意见**：${previousTotal} 条，已处理 ${input.resolved.length} 条，待处理 ${pending.length} 条`];
         for (const f of pending) lines.push(`- \`${f.path}:${f.line}\` ${excerpt(f.comment)}`);
         if (input.resolveFailed.length > 0) {
-            lines.push("", "以下意见已处理，但标记 resolved 失败（App 权限不足），请手动 resolve：");
+            lines.push("", "以下意见已处理，但标记 resolved 失败（原因见 Worker 日志），请手动 resolve：");
             for (const f of input.resolveFailed) lines.push(`- \`${f.path}:${f.line}\` ${excerpt(f.comment)}`);
         }
         parts.push(lines.join("\n"));
