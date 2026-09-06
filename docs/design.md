@@ -19,7 +19,7 @@
 | 6 | **只喂 diff，不喂整文件** | 成本可控，多数问题在 diff 上下文内可见；允许模型对上下文不足的地方不发表意见，不硬猜 |
 | 7 | **一次提交一个 review**，事件类型 `COMMENT` | 机器人不应有权卡合并，不用 `REQUEST_CHANGES` |
 | 8 | **评论用中文**，全局一种 | 私有仓自己看；将来公开仓要英文，改提示词里的一个变量即可 |
-| 9 | 名字 **CodeSeer**，slug `codeseer` | 见第 10 节 |
+| 9 | 名字 **CodeSeer**，App slug `codeseerbot` | 见第 10 节 |
 
 ## 3. 第一版范围
 
@@ -67,15 +67,17 @@ webhook Worker 和 consumer 放同一个 Worker 项目，靠 queue 绑定区分 
 
 | 项 | 值 |
 |----|-----|
-| 显示名 | CodeSeer |
-| slug | codeseer |
+| 显示名 | CodeSeerBot |
+| slug | codeseerbot（评论区显示 `codeseerbot[bot]`） |
+| App id | 4845701 |
+| webhook | `https://codeseer.81813780.workers.dev/webhook` |
 | 安装范围 | HarlonWang 账号，All repositories |
 | 订阅事件 | Pull request |
 | 权限 Pull requests | Read & write（读 PR、提交 review、resolve thread） |
-| 权限 Contents | Read（拉 diff 与 compare） |
+| 权限 Contents | Read & write（拉 diff 与 compare 只需 Read；`resolveReviewThread` 要求 Contents 写权限，2026-09-06 实测只给 Pull requests 写权限会报 Resource not accessible by integration） |
 | 权限 Metadata | Read（必选） |
 
-权限按最小集申请，之后要加再改。
+权限按最小集申请，之后要加再改。Contents 写权限是被 resolve 接口逼出来的，代码里没有任何写 Contents 的调用。
 
 鉴权链：App 私钥签 JWT，用 JWT 换取该安装的 installation token（有效 1 小时），后续 REST 与 GraphQL 都用它。单租户下 installation id 固定，但仍从 webhook payload 里取，不写死。
 
@@ -153,7 +155,9 @@ thread 被机器人 resolve 后用户又 reopen 的，下一轮不再动它：�
 
 ## 10. 命名
 
-CodeSeer：code + seer（看的人、先知），与 CodeRabbit 同构。读作 code-seer，显示名用驼峰避免被切成 codes-eer。选定前查过 `github.com/apps/codeseer` 未被注册（2026-09-06）。
+CodeSeer：code + seer（看的人、先知），与 CodeRabbit 同构。读作 code-seer，显示名用驼峰避免被切成 codes-eer。
+
+App slug 用 `codeseerbot`：GitHub 不允许 App 名与任何已有账号同名，`codeseer`、`codeseerai`、`codeseer-ai` 三个用户名都已被注册（2026-09-06 实测被拦）。查 slug 可用性时要同时查 `github.com/apps/<slug>` 和 `github.com/<slug>` 两个命名空间。
 
 被否的方向：动物意象（Kestrel、Owlreview）、审阅工具意象（Loupe、Redline、Marginalia）、PR 双关（Prudent、Appraise）。用户偏好带 code 或 review 的合成词。
 
@@ -169,7 +173,7 @@ CodeSeer：code + seer（看的人、先知），与 CodeRabbit 同构。读作 
 ## 13. 本地开发
 
 - webhook 用 smee.io 一类工具转发到本机 `wrangler dev`
-- 先用一个测试仓库单独安装 App 验证全链路，再改成 All repositories
+- 首次验证用的是本仓自己的 PR #1：机器人审自己的代码，提的意见修掉后 push，顺带验证增量审与 resolve
 
 ## 14. 待定
 
