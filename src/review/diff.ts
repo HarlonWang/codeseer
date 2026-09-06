@@ -37,7 +37,7 @@ export function parseDiff(text: string): DiffFile[] {
     let oldNo = 0;
     let newNo = 0;
 
-    for (const raw of text.split("\n")) {
+    for (const raw of splitSource(text)) {
         if (raw.startsWith("diff --git ")) {
             const m = /^diff --git a\/(.+?) b\/(.+)$/.exec(raw);
             file = { path: m ? m[2] : raw, oldPath: m ? m[1] : raw, status: "modified", binary: false, hunks: [] };
@@ -97,17 +97,102 @@ export function changedLineCount(file: DiffFile): number {
     return n;
 }
 
+const SIGN: Record<LineKind, string> = { add: "+", del: "-", ctx: " " };
+const ELLIPSIS = "  ...";
+
+function formatLine(no: number | null, sign: string, content: string): string {
+    return `${(no === null ? "" : String(no)).padStart(5)} ${sign} ${content}`;
+}
+
 export function annotate(file: DiffFile): string {
     const out: string[] = [];
     for (const h of file.hunks) {
         out.push(`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`);
-        for (const l of h.lines) {
-            const no = l.newNo === null ? "" : String(l.newNo);
-            const sign = l.kind === "add" ? "+" : l.kind === "del" ? "-" : " ";
-            out.push(`${no.padStart(5)} ${sign} ${l.content}`);
-        }
+        for (const l of h.lines) out.push(formatLine(l.newNo, SIGN[l.kind], l.content));
     }
     return out.join("\n");
+}
+
+export function splitSource(text: string): string[] {
+    const lines = text.split("\n");
+    if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    return lines;
+}
+
+export type ContextMode = "full" | "window" | "diff";
+
+export interface ContextOptions {
+    fullFileMaxLines: number;
+    contextWindowLines: number;
+}
+
+function mergeRanges(ranges: [number, number][]): [number, number][] {
+    const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+    const out: [number, number][] = [];
+    for (const r of sorted) {
+        const last = out[out.length - 1];
+        if (last && r[0] <= last[1] + 1) last[1] = Math.max(last[1], r[1]);
+        else out.push([r[0], r[1]]);
+    }
+    return out;
+}
+
+/**
+ * 把 diff 的改动标记铺到文件全文上；文件超过 fullFileMaxLines 时只保留每个 hunk 上下
+ * contextWindowLines 行的窗口。source 与 hunk 的新侧内容对不上（不是同一版本）时返回 null。
+ */
+export function annotateWithSource(
+    file: DiffFile,
+    source: string[],
+    opts: ContextOptions,
+): { text: string; mode: Exclude<ContextMode, "diff"> } | null {
+    const n = source.length;
+    if (n === 0 || file.hunks.length === 0) return null;
+    for (const h of file.hunks) for (const l of h.lines) if (l.newNo !== null && source[l.newNo - 1] !== l.content) return null;
+
+    const rendered: { anchor: number; text: string }[] = [];
+    let next = 1;
+    for (const h of [...file.hunks].sort((a, b) => a.newStart - b.newStart)) {
+        // 纯删除 hunk 的 newLines 为 0，newStart 指删除点之前那一行
+        const first = h.newLines === 0 ? h.newStart + 1 : h.newStart;
+        while (next < first && next <= n) {
+            rendered.push({ anchor: next, text: formatLine(next, " ", source[next - 1]) });
+            next++;
+        }
+        let anchor = Math.max(h.newStart, 1);
+        for (const l of h.lines) {
+            if (l.newNo !== null) {
+                anchor = l.newNo;
+                next = l.newNo + 1;
+            }
+            rendered.push({ anchor, text: formatLine(l.newNo, SIGN[l.kind], l.content) });
+        }
+    }
+    while (next <= n) {
+        rendered.push({ anchor: next, text: formatLine(next, " ", source[next - 1]) });
+        next++;
+    }
+
+    const mode = n <= opts.fullFileMaxLines ? "full" : "window";
+    const ranges: [number, number][] =
+        mode === "full"
+            ? [[1, n]]
+            : mergeRanges(
+                  file.hunks.map((h) => [
+                      Math.max(1, h.newStart - opts.contextWindowLines),
+                      Math.min(n, h.newStart + Math.max(h.newLines, 1) - 1 + opts.contextWindowLines),
+                  ]),
+              );
+
+    const out: string[] = [];
+    let prevEnd = 0;
+    for (const [a, b] of ranges) {
+        if (a > prevEnd + 1) out.push(ELLIPSIS);
+        for (const r of rendered) if (r.anchor >= a && r.anchor <= b) out.push(r.text);
+        prevEnd = b;
+    }
+    if (prevEnd < n) out.push(ELLIPSIS);
+    return { text: out.join("\n"), mode };
 }
 
 export function touchesOldLine(file: DiffFile, line: number): boolean {

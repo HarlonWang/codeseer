@@ -9,6 +9,8 @@ export interface Env {
     OPENAI_REASONING_EFFORT: string;
     MAX_FILE_DIFF_LINES: string;
     MAX_TOTAL_DIFF_CHARS: string;
+    FULL_FILE_MAX_LINES: string;
+    CONTEXT_WINDOW_LINES: string;
 }
 
 export interface ReviewJob {
@@ -23,11 +25,15 @@ export interface ReviewJob {
 export interface Limits {
     maxFileDiffLines: number;
     maxTotalDiffChars: number;
+    fullFileMaxLines: number;
+    contextWindowLines: number;
 }
 
 export function limitsOf(env: Env): Limits {
     return {
         maxFileDiffLines: Number(env.MAX_FILE_DIFF_LINES) || 800,
         maxTotalDiffChars: Number(env.MAX_TOTAL_DIFF_CHARS) || 240000,
+        fullFileMaxLines: Number(env.FULL_FILE_MAX_LINES) || 1000,
+        contextWindowLines: Number(env.CONTEXT_WINDOW_LINES) || 150,
     };
 }

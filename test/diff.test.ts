@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { annotate, changedLineCount, parseDiff, remapOldLine, rightSideLines, touchesOldLine } from "../src/review/diff";
+import { annotate, annotateWithSource, changedLineCount, parseDiff, remapOldLine, rightSideLines, splitSource, touchesOldLine } from "../src/review/diff";
 
 const SAMPLE = `diff --git a/src/a.ts b/src/a.ts
 index 1111111..2222222 100644
@@ -69,6 +69,62 @@ describe("parseDiff", () => {
         expect(text).toContain("      - line2");
         expect(text).toContain("    2 + line2 changed");
         expect(text).toContain("   12 + line11 changed");
+    });
+});
+
+describe("annotateWithSource", () => {
+    const [a] = parseDiff(SAMPLE);
+    const source = splitSource("line1\nline2 changed\nline2 extra\nline3\nline4\nl6\nl7\nl8\nl9\nl10\nline10\nline11 changed\n");
+
+    it("lays diff markers over the whole file", () => {
+        const r = annotateWithSource(a, source, { fullFileMaxLines: 1000, contextWindowLines: 150 });
+        expect(r?.mode).toBe("full");
+        expect(r?.text.split("\n")).toEqual([
+            "    1   line1",
+            "      - line2",
+            "    2 + line2 changed",
+            "    3 + line2 extra",
+            "    4   line3",
+            "    5   line4",
+            "    6   l6",
+            "    7   l7",
+            "    8   l8",
+            "    9   l9",
+            "   10   l10",
+            "   11   line10",
+            "      - line11",
+            "   12 + line11 changed",
+        ]);
+    });
+
+    it("keeps merged windows around hunks for long files", () => {
+        const r = annotateWithSource(a, source, { fullFileMaxLines: 5, contextWindowLines: 1 });
+        expect(r?.mode).toBe("window");
+        expect(r?.text.split("\n")).toEqual([
+            "    1   line1",
+            "      - line2",
+            "    2 + line2 changed",
+            "    3 + line2 extra",
+            "    4   line3",
+            "    5   line4",
+            "    6   l6",
+            "  ...",
+            "   10   l10",
+            "   11   line10",
+            "      - line11",
+            "   12 + line11 changed",
+        ]);
+    });
+
+    it("marks omitted tails and anchors pure deletions after the preceding line", () => {
+        const [f] = parseDiff(["diff --git a/x b/x", "--- a/x", "+++ b/x", "@@ -3,1 +2,0 @@", "-gone"].join("\n"));
+        const r = annotateWithSource(f, ["a", "b", "c", "d", "e", "f"], { fullFileMaxLines: 3, contextWindowLines: 1 });
+        expect(r?.text.split("\n")).toEqual(["    1   a", "    2   b", "      - gone", "    3   c", "  ..."]);
+    });
+
+    it("rejects a source that does not match the hunks", () => {
+        expect(annotateWithSource(a, ["nope"], { fullFileMaxLines: 1000, contextWindowLines: 150 })).toBeNull();
+        expect(annotateWithSource(a, [], { fullFileMaxLines: 1000, contextWindowLines: 150 })).toBeNull();
     });
 });
 

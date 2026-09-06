@@ -7,7 +7,7 @@ import { parseDiff, remapOldLine, rightSideLines, touchesOldLine, type DiffFile 
 import { callModel } from "./model";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt";
 import { composeReviewBody, partitionFindings, toReviewComments } from "./report";
-import { selectFiles } from "./select";
+import { selectFiles, wantsSource } from "./select";
 
 export class SkipReview extends Error {}
 
@@ -36,7 +36,10 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     const mode = incremental ? "incremental" : "full";
     const fromSha = incremental ? state!.lastReviewedSha : null;
 
-    const { selected, skipped } = selectFiles(incremental ?? fullFiles, limitsOf(env));
+    const limits = limitsOf(env);
+    const scope = incremental ?? fullFiles;
+    const sources = await fetchSources(api, scope.filter((f) => wantsSource(f, limits)), job.headSha, tag);
+    const { selected, skipped, degraded } = selectFiles(scope, limits, sources);
 
     const { carried, toJudge } = await splitPreviousFindings(api, job.number, state?.findings ?? [], incremental);
 
@@ -47,6 +50,10 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     }
 
     const user = buildUserPrompt({ owner: job.owner, repo: job.repo, pr, mode, fromSha, files: selected, toJudge });
+    const contexts = selected.map((s) => s.context);
+    console.log(
+        `${tag}: files full=${contexts.filter((c) => c === "full").length} window=${contexts.filter((c) => c === "window").length} diff=${contexts.filter((c) => c === "diff").length} degraded=${degraded.length} chars=${user.length}`,
+    );
     const { output, usage } = await callModel(env, SYSTEM_PROMPT, user);
     console.log(`${tag}: model ${env.OPENAI_MODEL} in=${usage.inputTokens} out=${usage.outputTokens} findings=${output.findings.length}`);
 
@@ -83,6 +90,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         carried,
         overflow,
         skipped,
+        degraded,
     });
     const comments = toReviewComments(inline);
     const review = await api.createReview(job.number, job.headSha, body, comments);
@@ -94,6 +102,20 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         findings: [...carried, ...remapStillOpen(stillOpen, incremental), ...tracked],
     });
     console.log(`${tag}: posted ${comments.length} inline, resolved ${resolved.length}, carried ${carried.length + stillOpen.length}`);
+}
+
+async function fetchSources(api: PullRequestApi, files: DiffFile[], ref: string, tag: string): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    await Promise.all(
+        files.map(async (f) => {
+            try {
+                out.set(f.path, await api.fileContent(f.path, ref));
+            } catch (e) {
+                console.error(`${tag}: fetch ${f.path} failed: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        }),
+    );
+    return out;
 }
 
 async function splitPreviousFindings(

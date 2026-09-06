@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { composeReviewBody, partitionFindings, toReviewComments } from "../src/review/report";
 import { ignoreReason } from "../src/review/ignore";
-import { selectFiles } from "../src/review/select";
+import { selectFiles, wantsSource } from "../src/review/select";
 import { parseDiff } from "../src/review/diff";
+import type { Limits } from "../src/env";
+
+const limits = (over: Partial<Limits>): Limits => ({ maxFileDiffLines: 10, maxTotalDiffChars: 1000, fullFileMaxLines: 1000, contextWindowLines: 150, ...over });
 
 describe("partitionFindings", () => {
     it("keeps findings on diff lines inline and overflows the rest", () => {
@@ -45,6 +48,7 @@ describe("composeReviewBody", () => {
             carried: [{ threadId: "t2", path: "b.ts", line: 5, comment: "still open" }],
             overflow: [{ path: "c.ts", line: 99, severity: "medium", comment: "somewhere" }],
             skipped: [{ path: "package-lock.json", reason: "lock 文件" }],
+            degraded: ["big.kt"],
         });
         expect(body).toContain("**上轮意见**：2 条，已处理 1 条，待处理 1 条");
         expect(body).toContain("- `b.ts:5` still open");
@@ -52,6 +56,8 @@ describe("composeReviewBody", () => {
         expect(body).toContain("### 其他意见");
         expect(body).toContain("`c.ts:99` **[建议]** somewhere");
         expect(body).toContain("`package-lock.json`：lock 文件");
+        expect(body).toContain("### 只按 diff 审查的文件");
+        expect(body).toContain("- `big.kt`");
         expect(body).toContain("增量 aaaaaaa..bbbbbbb");
     });
 });
@@ -69,11 +75,49 @@ describe("ignore and select", () => {
         const big = ["diff --git a/big.ts b/big.ts", "--- a/big.ts", "+++ b/big.ts", "@@ -0,0 +1,3 @@", "+1", "+2", "+3"].join("\n");
         const small = ["diff --git a/s.ts b/s.ts", "--- a/s.ts", "+++ b/s.ts", "@@ -0,0 +1 @@", "+x"].join("\n");
         const files = parseDiff(`${big}\n${small}\n`);
-        const { selected, skipped } = selectFiles(files, { maxFileDiffLines: 2, maxTotalDiffChars: 1000 });
+        const { selected, skipped } = selectFiles(files, limits({ maxFileDiffLines: 2 }));
         expect(selected.map((s) => s.file.path)).toEqual(["s.ts"]);
         expect(skipped[0].reason).toContain("diff 超过 2 行");
-        const tight = selectFiles(files, { maxFileDiffLines: 10, maxTotalDiffChars: 40 });
+        const tight = selectFiles(files, limits({ maxTotalDiffChars: 40 }));
         expect(tight.selected.map((s) => s.file.path)).toEqual(["s.ts"]);
         expect(tight.skipped[0].reason).toBe("本次审查总量已达上限");
+    });
+
+    const modified = (path: string) =>
+        [`diff --git a/${path} b/${path}`, `--- a/${path}`, `+++ b/${path}`, "@@ -2,1 +2,1 @@", "-old", "+new"].join("\n");
+    const source = (n: number) => Array.from({ length: n }, (_, i) => (i === 1 ? "new" : `l${i + 1}`)).join("\n");
+
+    it("attaches full source to modified code files only", () => {
+        const files = parseDiff(`${modified("a.kt")}\n${modified("README.md")}\n`);
+        expect(wantsSource(files[0], limits({}))).toBe(true);
+        expect(wantsSource(files[1], limits({}))).toBe(false);
+        const { selected, degraded } = selectFiles(files, limits({}), new Map([["a.kt", source(5)], ["README.md", source(5)]]));
+        expect(selected.map((s) => [s.file.path, s.context])).toEqual([
+            ["a.kt", "full"],
+            ["README.md", "diff"],
+        ]);
+        expect(selected[0].text).toContain("    5   l5");
+        expect(degraded).toEqual([]);
+    });
+
+    it("falls back to diff when the source does not match the hunk", () => {
+        const files = parseDiff(`${modified("a.kt")}\n`);
+        const { selected } = selectFiles(files, limits({}), new Map([["a.kt", "x\ny\nz"]]));
+        expect(selected[0].context).toBe("diff");
+    });
+
+    it("degrades the largest full files first when over the total budget", () => {
+        const files = parseDiff(`${modified("small.kt")}\n${modified("big.kt")}\n`);
+        const sources = new Map([["small.kt", source(5)], ["big.kt", source(40)]]);
+        const roomy = selectFiles(files, limits({}), sources);
+        expect(roomy.selected.map((s) => s.context)).toEqual(["full", "full"]);
+        const total = roomy.selected.reduce((sum, s) => sum + s.text.length, 0);
+        const tight = selectFiles(files, limits({ maxTotalDiffChars: total - 1 }), sources);
+        expect(tight.selected.map((s) => [s.file.path, s.context])).toEqual([
+            ["small.kt", "full"],
+            ["big.kt", "diff"],
+        ]);
+        expect(tight.degraded).toEqual(["big.kt"]);
+        expect(tight.skipped).toEqual([]);
     });
 });
