@@ -41,12 +41,14 @@ describe("composeReviewBody", () => {
             summary: "改了点东西",
             judged,
             resolved: judged,
+            resolveFailed: judged,
             carried: [{ threadId: "t2", path: "b.ts", line: 5, comment: "still open" }],
             overflow: [{ path: "c.ts", line: 99, severity: "medium", comment: "somewhere" }],
             skipped: [{ path: "package-lock.json", reason: "lock 文件" }],
         });
         expect(body).toContain("**上轮意见**：2 条，已处理 1 条，待处理 1 条");
         expect(body).toContain("- `b.ts:5` still open");
+        expect(body).toContain("标记 resolved 失败");
         expect(body).toContain("### 其他意见");
         expect(body).toContain("`c.ts:99` **[建议]** somewhere");
         expect(body).toContain("`package-lock.json`：lock 文件");

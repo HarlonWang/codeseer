@@ -46,6 +46,7 @@ export interface ReportInput {
     summary: string;
     judged: TrackedFinding[];
     resolved: TrackedFinding[];
+    resolveFailed: TrackedFinding[];
     carried: TrackedFinding[];
     overflow: ModelFinding[];
     skipped: SkippedFile[];
@@ -63,6 +64,10 @@ export function composeReviewBody(input: ReportInput): string {
         const pending = [...input.carried, ...input.judged.filter((f) => !input.resolved.includes(f))];
         const lines = [`**上轮意见**：${previousTotal} 条，已处理 ${input.resolved.length} 条，待处理 ${pending.length} 条`];
         for (const f of pending) lines.push(`- \`${f.path}:${f.line}\` ${excerpt(f.comment)}`);
+        if (input.resolveFailed.length > 0) {
+            lines.push("", "以下意见已处理，但标记 resolved 失败（App 权限不足），请手动 resolve：");
+            for (const f of input.resolveFailed) lines.push(`- \`${f.path}:${f.line}\` ${excerpt(f.comment)}`);
+        }
         parts.push(lines.join("\n"));
     }
     parts.push(`### 摘要\n${input.summary.trim()}`);

@@ -61,7 +61,15 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     const resolved: TrackedFinding[] = [];
     const stillOpen: TrackedFinding[] = [];
     toJudge.forEach((f, i) => (resolvedIdx.has(i) ? resolved : stillOpen).push(f));
-    for (const f of resolved) await api.resolveThread(f.threadId);
+    const resolveFailed: TrackedFinding[] = [];
+    for (const f of resolved) {
+        try {
+            await api.resolveThread(f.threadId);
+        } catch (e) {
+            console.error(`${tag}: resolve ${f.threadId} failed: ${e instanceof Error ? e.message : String(e)}`);
+            resolveFailed.push(f);
+        }
+    }
 
     const body = composeReviewBody({
         mode,
@@ -71,6 +79,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         summary: output.summary,
         judged: toJudge,
         resolved,
+        resolveFailed,
         carried,
         overflow,
         skipped,
