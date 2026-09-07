@@ -20,7 +20,7 @@
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `OPENAI_MODEL` | `gpt-5.6-terra` | 模型型号，需支持结构化输出；选型看免费额度分组（`docs/design.md` 第 12 节） |
-| `OPENAI_REASONING_EFFORT` | `medium` | 推理强度 `low` / `medium` / `high`，越高越慢越贵 |
+| `OPENAI_REASONING_EFFORT` | `high` | 推理强度 `low` / `medium` / `high`，越高越慢越贵 |
 | `MAX_FILE_DIFF_LINES` | `2000` | 单文件改动行数超过即跳过，summary 里会列出 |
 | `MAX_TOTAL_DIFF_CHARS` | `480000` | 单次审查喂给模型的代码总字符上限。超出时先把最大的文件退回只喂 diff，仍超出的文件跳过，两种情况 summary 里都会列出 |
 | `FULL_FILE_MAX_LINES` | `1000` | 改动过的代码文件不超过这个行数就喂全文，超过则只喂每个改动点上下 `CONTEXT_WINDOW_LINES` 行的片段 |
