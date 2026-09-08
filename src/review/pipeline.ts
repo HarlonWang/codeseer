@@ -6,7 +6,7 @@ import { loadState, saveState, stateKey, type TrackedFinding } from "../state";
 import { parseDiff, remapOldLine, rightSideLines, touchesOldLine, type DiffFile } from "./diff";
 import { callModel } from "./model";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt";
-import { composeApproveOnlyBody, composeReviewBody, decideVerdict, partitionFindings, toReviewComments, type SeverityComment } from "./report";
+import { composeNoReviewBody, composeReviewBody, decideVerdict, partitionFindings, toReviewComments, type SeverityComment } from "./report";
 import { selectFiles, wantsSource } from "./select";
 
 export class SkipReview extends Error {}
@@ -46,10 +46,12 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     const approving = approveEnabled(env);
     if (selected.length === 0 && toJudge.length === 0) {
         const verdict = decideVerdict({ findings: [], pending: carried, skipped });
-        if (approving && verdict.approve) {
-            await api.createReview(job.number, job.headSha, composeApproveOnlyBody(job.headSha), [], "APPROVE");
+        const event = approving && verdict.approve ? "APPROVE" : "COMMENT";
+        if (event === "APPROVE" || skipped.length > 0) {
+            const body = composeNoReviewBody({ verdict: approving ? verdict : undefined, skipped, headSha: job.headSha });
+            await api.createReview(job.number, job.headSha, body, [], event);
         }
-        console.log(`${tag}: nothing to review (${mode}), approve=${approving && verdict.approve}`);
+        console.log(`${tag}: nothing to review (${mode}), ${event}`);
         await saveState(env.STATE, key, { lastReviewedSha: job.headSha, findings: carried });
         return;
     }

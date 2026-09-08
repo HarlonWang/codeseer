@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeApproveOnlyBody, composeReviewBody, decideVerdict, partitionFindings, toReviewComments } from "../src/review/report";
+import { composeNoReviewBody, composeReviewBody, decideVerdict, partitionFindings, toReviewComments } from "../src/review/report";
 import { ignoreReason } from "../src/review/ignore";
 import { selectFiles, wantsSource } from "../src/review/select";
 import { parseDiff } from "../src/review/diff";
@@ -70,11 +70,18 @@ describe("decideVerdict", () => {
     });
 });
 
-describe("composeApproveOnlyBody", () => {
+describe("composeNoReviewBody", () => {
     it("states the approval and scope", () => {
-        const body = composeApproveOnlyBody("bbbbbbb2");
+        const body = composeNoReviewBody({ verdict: { approve: true, reasons: [] }, skipped: [], headSha: "bbbbbbb2" });
         expect(body).toContain("**结论**：批准");
+        expect(body).not.toContain("### 跳过的文件");
         expect(body).toContain("至 bbbbbbb<");
+    });
+
+    it("lists skipped files with the refusal reason", () => {
+        const body = composeNoReviewBody({ verdict: { approve: false, reasons: ["1 个文件未审查"] }, skipped: [{ path: "huge.kt", reason: "太大" }], headSha: "bbbbbbb2" });
+        expect(body).toContain("**结论**：不批准（1 个文件未审查）");
+        expect(body).toContain("- `huge.kt`：太大");
     });
 });
 

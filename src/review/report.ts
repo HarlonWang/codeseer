@@ -123,6 +123,14 @@ export function composeReviewBody(input: ReportInput): string {
     return parts.join("\n\n");
 }
 
-export function composeApproveOnlyBody(headSha: string): string {
-    return ["## CodeSeer 审查", verdictLine({ approve: true, reasons: [] }), "本轮改动没有需要审查的代码，也没有阻塞级的待处理意见。", `<sub>至 ${headSha.slice(0, 7)}</sub>`].join("\n\n");
+export function composeNoReviewBody(input: { verdict?: Verdict; skipped: SkippedFile[]; headSha: string }): string {
+    const parts: string[] = ["## CodeSeer 审查"];
+    if (input.verdict) parts.push(verdictLine(input.verdict));
+    parts.push("本轮改动没有可审查的代码。");
+    if (input.skipped.length > 0) {
+        const lines = input.skipped.map((s) => `- \`${s.path}\`：${s.reason}`);
+        parts.push(`### 跳过的文件\n${lines.join("\n")}`);
+    }
+    parts.push(`<sub>至 ${input.headSha.slice(0, 7)}</sub>`);
+    return parts.join("\n\n");
 }
