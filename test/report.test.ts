@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeReviewBody, partitionFindings, toReviewComments } from "../src/review/report";
+import { composeNoReviewBody, composeReviewBody, decideVerdict, partitionFindings, toReviewComments } from "../src/review/report";
 import { ignoreReason } from "../src/review/ignore";
 import { selectFiles, wantsSource } from "../src/review/select";
 import { parseDiff } from "../src/review/diff";
@@ -30,6 +30,58 @@ describe("partitionFindings", () => {
         ]);
         expect(comments).toHaveLength(1);
         expect(comments[0].body).toBe("**[严重]** one\n\n**[细节]** two");
+        expect(comments[0].severity).toBe("high");
+    });
+});
+
+describe("decideVerdict", () => {
+    const skippedNone: [] = [];
+
+    it("approves when only low findings remain", () => {
+        const v = decideVerdict({
+            findings: [{ path: "a.ts", line: 1, severity: "low", comment: "nit" }],
+            pending: [{ threadId: "t", path: "b.ts", line: 2, comment: "old nit", severity: "low" }],
+            skipped: skippedNone,
+        });
+        expect(v).toEqual({ approve: true, reasons: [] });
+    });
+
+    it("blocks on medium findings this round", () => {
+        const v = decideVerdict({
+            findings: [
+                { path: "a.ts", line: 1, severity: "medium", comment: "hmm" },
+                { path: "a.ts", line: 3, severity: "high", comment: "   " },
+            ],
+            pending: [],
+            skipped: skippedNone,
+        });
+        expect(v.approve).toBe(false);
+        expect(v.reasons).toEqual(["本轮 1 条严重或建议级意见"]);
+    });
+
+    it("treats pending findings without severity as blocking", () => {
+        const v = decideVerdict({ findings: [], pending: [{ threadId: "t", path: "b.ts", line: 2, comment: "legacy" }], skipped: skippedNone });
+        expect(v.reasons).toEqual(["上轮 1 条严重或建议级意见待处理"]);
+    });
+
+    it("blocks when files were skipped", () => {
+        const v = decideVerdict({ findings: [], pending: [], skipped: [{ path: "huge.kt", reason: "太大" }] });
+        expect(v.reasons).toEqual(["1 个文件未审查"]);
+    });
+});
+
+describe("composeNoReviewBody", () => {
+    it("states the approval and scope", () => {
+        const body = composeNoReviewBody({ verdict: { approve: true, reasons: [] }, skipped: [], headSha: "bbbbbbb2" });
+        expect(body).toContain("**结论**：批准");
+        expect(body).not.toContain("### 跳过的文件");
+        expect(body).toContain("至 bbbbbbb<");
+    });
+
+    it("lists skipped files with the refusal reason", () => {
+        const body = composeNoReviewBody({ verdict: { approve: false, reasons: ["1 个文件未审查"] }, skipped: [{ path: "huge.kt", reason: "太大" }], headSha: "bbbbbbb2" });
+        expect(body).toContain("**结论**：不批准（1 个文件未审查）");
+        expect(body).toContain("- `huge.kt`：太大");
     });
 });
 
@@ -59,6 +111,13 @@ describe("composeReviewBody", () => {
         expect(body).toContain("### 只按 diff 审查的文件");
         expect(body).toContain("- `big.kt`：本次审查总量已达上限");
         expect(body).toContain("增量 aaaaaaa..bbbbbbb");
+        expect(body).not.toContain("**结论**");
+    });
+
+    it("prints the verdict when given", () => {
+        const base = { mode: "full" as const, fromSha: null, headSha: "bbbbbbb2", model: "m", summary: "s", judged: [], resolved: [], resolveFailed: [], carried: [], overflow: [], skipped: [], degraded: [] };
+        expect(composeReviewBody({ ...base, verdict: { approve: true, reasons: [] } })).toContain("**结论**：批准\n");
+        expect(composeReviewBody({ ...base, verdict: { approve: false, reasons: ["a", "b"] } })).toContain("**结论**：不批准（a；b）");
     });
 });
 

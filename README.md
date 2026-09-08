@@ -13,6 +13,8 @@
 
 装好后无需任何操作：账号下任何仓库开 PR、push 新 commit、草稿转正式或重开 PR，`codeseerbot[bot]` 都会来审。草稿 PR 和机器人发起的 PR（如 dependabot）不审。
 
+没有严重或建议级意见、没有跳过的文件时，机器人会批准（approve）PR，计入分支保护的 approval 数；否则只留评论，不会 request changes。判据见 `docs/design.md` 的批准一节。
+
 ### 配置
 
 可调项都在 `wrangler.toml` 的 `[vars]` 里，改完 `npm run deploy` 生效：
@@ -25,6 +27,7 @@
 | `MAX_TOTAL_DIFF_CHARS` | `480000` | 单次审查喂给模型的代码总字符上限。超出时先把最大的文件退回只喂 diff，仍超出的文件跳过，两种情况 summary 里都会列出 |
 | `FULL_FILE_MAX_LINES` | `1000` | 改动过的代码文件不超过这个行数就喂全文，超过则只喂每个改动点上下 `CONTEXT_WINDOW_LINES` 行的片段 |
 | `CONTEXT_WINDOW_LINES` | `150` | 片段模式下每个改动点上下各保留的行数 |
+| `APPROVE_ENABLED` | `true` | 满足判据时是否以 approve 提交 review；`false` 则一律只评论 |
 
 需要改代码的项：
 

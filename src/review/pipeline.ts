@@ -1,4 +1,4 @@
-import { limitsOf, type Env, type ReviewJob } from "../env";
+import { approveEnabled, limitsOf, type Env, type ReviewJob } from "../env";
 import { appJwt, installationToken } from "../github/auth";
 import { GitHubClient } from "../github/client";
 import { PullRequestApi, type ReviewThread } from "../github/pr";
@@ -6,7 +6,7 @@ import { loadState, saveState, stateKey, type TrackedFinding } from "../state";
 import { parseDiff, remapOldLine, rightSideLines, touchesOldLine, type DiffFile } from "./diff";
 import { callModel } from "./model";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt";
-import { composeReviewBody, partitionFindings, toReviewComments } from "./report";
+import { composeNoReviewBody, composeReviewBody, decideVerdict, partitionFindings, toReviewComments, type SeverityComment } from "./report";
 import { selectFiles, wantsSource } from "./select";
 
 export class SkipReview extends Error {}
@@ -43,8 +43,15 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
 
     const { carried, toJudge } = await splitPreviousFindings(api, job.number, state?.findings ?? [], incremental);
 
+    const approving = approveEnabled(env);
     if (selected.length === 0 && toJudge.length === 0) {
-        console.log(`${tag}: nothing to review (${mode})`);
+        const verdict = decideVerdict({ findings: [], pending: carried, skipped });
+        const event = approving && verdict.approve ? "APPROVE" : "COMMENT";
+        if (event === "APPROVE" || skipped.length > 0) {
+            const body = composeNoReviewBody({ verdict: approving ? verdict : undefined, skipped, headSha: job.headSha });
+            await api.createReview(job.number, job.headSha, body, [], event);
+        }
+        console.log(`${tag}: nothing to review (${mode}), ${event}`);
         await saveState(env.STATE, key, { lastReviewedSha: job.headSha, findings: carried });
         return;
     }
@@ -78,7 +85,9 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         }
     }
 
+    const verdict = decideVerdict({ findings: output.findings, pending: [...carried, ...stillOpen], skipped });
     const body = composeReviewBody({
+        verdict: approving ? verdict : undefined,
         mode,
         fromSha,
         headSha: job.headSha,
@@ -93,7 +102,8 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         degraded,
     });
     const comments = toReviewComments(inline);
-    const review = await api.createReview(job.number, job.headSha, body, comments);
+    const event = approving && verdict.approve ? "APPROVE" : "COMMENT";
+    const review = await api.createReview(job.number, job.headSha, body, comments, event);
 
     const threads = (await api.listReviewThreads(job.number)).filter((t) => t.reviewId === review.nodeId);
     const tracked = trackNewFindings(comments, threads);
@@ -101,7 +111,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         lastReviewedSha: job.headSha,
         findings: [...carried, ...remapStillOpen(stillOpen, incremental), ...tracked],
     });
-    console.log(`${tag}: posted ${comments.length} inline, resolved ${resolved.length}, carried ${carried.length + stillOpen.length}`);
+    console.log(`${tag}: ${event} with ${comments.length} inline, resolved ${resolved.length}, carried ${carried.length + stillOpen.length}`);
 }
 
 const FETCH_CONCURRENCY = 6;
@@ -153,11 +163,11 @@ function remapStillOpen(findings: TrackedFinding[], incremental: DiffFile[] | nu
     });
 }
 
-function trackNewFindings(comments: { path: string; line: number; body: string }[], threads: ReviewThread[]): TrackedFinding[] {
+function trackNewFindings(comments: SeverityComment[], threads: ReviewThread[]): TrackedFinding[] {
     const out: TrackedFinding[] = [];
     for (const c of comments) {
         const t = threads.find((x) => x.path === c.path && x.line === c.line);
-        if (t) out.push({ threadId: t.id, path: c.path, line: c.line, comment: c.body });
+        if (t) out.push({ threadId: t.id, path: c.path, line: c.line, comment: c.body, severity: c.severity });
     }
     return out;
 }

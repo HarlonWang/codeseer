@@ -16,6 +16,8 @@ export interface ReviewComment {
     body: string;
 }
 
+export type ReviewEvent = "COMMENT" | "APPROVE";
+
 export interface ReviewThread {
     id: string;
     isResolved: boolean;
@@ -78,12 +80,18 @@ export class PullRequestApi {
         }
     }
 
-    async createReview(number: number, commitId: string, body: string, comments: ReviewComment[]): Promise<{ nodeId: string }> {
+    async createReview(
+        number: number,
+        commitId: string,
+        body: string,
+        comments: ReviewComment[],
+        event: ReviewEvent = "COMMENT",
+    ): Promise<{ nodeId: string }> {
         const review = await this.gh.rest<{ node_id: string }>("POST", `${this.base}/pulls/${number}/reviews`, {
             body: {
                 commit_id: commitId,
                 body,
-                event: "COMMENT",
+                event,
                 comments: comments.map((c) => ({ path: c.path, line: c.line, side: "RIGHT", body: c.body })),
             },
         });

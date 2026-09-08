@@ -1,8 +1,11 @@
+import type { Severity } from "./review/model";
+
 export interface TrackedFinding {
     threadId: string;
     path: string;
     line: number;
     comment: string;
+    severity?: Severity;
 }
 
 export interface PrState {

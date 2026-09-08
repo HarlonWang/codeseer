@@ -4,6 +4,11 @@ import type { ModelFinding, Severity } from "./model";
 import type { SkippedFile } from "./select";
 
 const SEVERITY_LABEL: Record<Severity, string> = { high: "严重", medium: "建议", low: "细节" };
+const SEVERITY_RANK: Record<Severity, number> = { high: 2, medium: 1, low: 0 };
+
+function isBlocking(severity: Severity | undefined): boolean {
+    return severity !== "low";
+}
 
 export interface ValidFinding extends ModelFinding {
     line: number;
@@ -23,7 +28,11 @@ export function partitionFindings(
     return { inline, overflow };
 }
 
-export function toReviewComments(findings: ValidFinding[]): ReviewComment[] {
+export interface SeverityComment extends ReviewComment {
+    severity: Severity;
+}
+
+export function toReviewComments(findings: ValidFinding[]): SeverityComment[] {
     const byKey = new Map<string, ValidFinding[]>();
     for (const f of findings) {
         const key = `${f.path}:${f.line}`;
@@ -35,7 +44,23 @@ export function toReviewComments(findings: ValidFinding[]): ReviewComment[] {
         path: group[0].path,
         line: group[0].line,
         body: group.map((f) => `**[${SEVERITY_LABEL[f.severity]}]** ${f.comment.trim()}`).join("\n\n"),
+        severity: group.reduce((max, f) => (SEVERITY_RANK[f.severity] > SEVERITY_RANK[max] ? f.severity : max), group[0].severity),
     }));
+}
+
+export interface Verdict {
+    approve: boolean;
+    reasons: string[];
+}
+
+export function decideVerdict(input: { findings: ModelFinding[]; pending: TrackedFinding[]; skipped: SkippedFile[] }): Verdict {
+    const reasons: string[] = [];
+    const blockingNow = input.findings.filter((f) => f.comment.trim() && isBlocking(f.severity)).length;
+    const blockingPending = input.pending.filter((f) => isBlocking(f.severity)).length;
+    if (blockingNow > 0) reasons.push(`本轮 ${blockingNow} 条严重或建议级意见`);
+    if (blockingPending > 0) reasons.push(`上轮 ${blockingPending} 条严重或建议级意见待处理`);
+    if (input.skipped.length > 0) reasons.push(`${input.skipped.length} 个文件未审查`);
+    return { approve: reasons.length === 0, reasons };
 }
 
 export interface ReportInput {
@@ -51,6 +76,7 @@ export interface ReportInput {
     overflow: ModelFinding[];
     skipped: SkippedFile[];
     degraded: SkippedFile[];
+    verdict?: Verdict;
 }
 
 function excerpt(s: string, n = 80): string {
@@ -58,8 +84,13 @@ function excerpt(s: string, n = 80): string {
     return one.length > n ? `${one.slice(0, n)}…` : one;
 }
 
+function verdictLine(v: Verdict): string {
+    return v.approve ? "**结论**：批准" : `**结论**：不批准（${v.reasons.join("；")}）`;
+}
+
 export function composeReviewBody(input: ReportInput): string {
     const parts: string[] = ["## CodeSeer 审查"];
+    if (input.verdict) parts.push(verdictLine(input.verdict));
     const previousTotal = input.judged.length + input.carried.length;
     if (previousTotal > 0) {
         const pending = [...input.carried, ...input.judged.filter((f) => !input.resolved.includes(f))];
@@ -89,5 +120,17 @@ export function composeReviewBody(input: ReportInput): string {
             ? `整个 PR 至 ${input.headSha.slice(0, 7)}`
             : `增量 ${input.fromSha?.slice(0, 7)}..${input.headSha.slice(0, 7)}`;
     parts.push(`<sub>${scope} · ${input.model}</sub>`);
+    return parts.join("\n\n");
+}
+
+export function composeNoReviewBody(input: { verdict?: Verdict; skipped: SkippedFile[]; headSha: string }): string {
+    const parts: string[] = ["## CodeSeer 审查"];
+    if (input.verdict) parts.push(verdictLine(input.verdict));
+    parts.push("本轮改动没有可审查的代码。");
+    if (input.skipped.length > 0) {
+        const lines = input.skipped.map((s) => `- \`${s.path}\`：${s.reason}`);
+        parts.push(`### 跳过的文件\n${lines.join("\n")}`);
+    }
+    parts.push(`<sub>至 ${input.headSha.slice(0, 7)}</sub>`);
     return parts.join("\n\n");
 }

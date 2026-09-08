@@ -29,6 +29,7 @@
 2. push 新 commit 后增量审：只看新增 diff，不重复刷已提过的意见
 3. 已处理判定：上一轮意见被修掉的自动 resolve，summary 开头汇报上轮 N 条、已处理 M 条、待处理 K 条
 4. 全局忽略规则：lock 文件、生成代码、二进制、vendored 代码不审；单文件 diff 超阈值跳过并在 summary 里说明
+5. 批准：本轮没有阻塞级意见时以 `APPROVE` 提交 review，计入分支保护的 approval 数（见第 7.5 节）
 
 不做（第一版）：
 
@@ -94,7 +95,8 @@ KV 一条记录，key 为 `owner/repo#pr`：
         thread_id: string,   // GraphQL node id，resolve 用
         path: string,
         line: number,
-        comment: string
+        comment: string,
+        severity: "high" | "medium" | "low"   // 批准判定用；旧记录没有此字段，按阻塞处理
     }]
 }
 ```
@@ -131,7 +133,23 @@ KV 一条记录，key 为 `owner/repo#pr`：
 
 ### 7.4 提交
 
-Reviews API 一次提交：`event: COMMENT`，body 为 summary，`comments` 为 inline 列表。提交后用 GraphQL 拿回各 thread 的 node id，写入 KV。
+Reviews API 一次提交：`event` 为 `COMMENT` 或 `APPROVE`（见 7.5），body 为 summary，`comments` 为 inline 列表。提交后用 GraphQL 拿回各 thread 的 node id，写入 KV。
+
+### 7.5 批准
+
+带 Pull requests 写权限的 App 提交 `event: APPROVE` 的 review，GitHub 视作一个有 write access 的 reviewer 的批准，计入分支保护的「Require approvals」。单人仓库作者不能批准自己的 PR，这一票补上了这个缺口。
+
+批准判据是规则不是模型判断，三条同时满足才批准，否则 `COMMENT`：
+
+- 本轮没有 high 或 medium 级 finding（low 不拦）
+- 上轮遗留的未解决意见里没有 high 或 medium 级
+- 本轮没有因阈值被跳过的文件（只按 diff 审的不算跳过）
+
+每一轮都重新判定：分支保护开了「Dismiss stale approvals」时新 commit 会作废旧批准，所以干净的一轮要重新批准；反过来批准过之后又出现阻塞级意见，只是不再续票，不撤销、不发 `REQUEST_CHANGES`。撤销动作误判代价高，而不续票没有副作用。没有需要审的代码时（只碰了忽略文件或全被阈值跳过）不调模型，但仍按判据发一条只有结论的 review：能批准就 `APPROVE`；有跳过文件就 `COMMENT` 列出原因；两者都不是则不发。
+
+`wrangler.toml` 的 `APPROVE_ENABLED` 控制开关；关闭时判据不参与，review 一律 `COMMENT`，summary 也不写结论行。
+
+分支保护勾了「Require review from Code Owners」或 ruleset 限定了批准者身份时，机器人的批准不计数，这是 GitHub 侧规则，不在本项目处理。
 
 ## 8. 增量审
 
