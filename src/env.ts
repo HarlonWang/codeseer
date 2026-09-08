@@ -11,6 +11,7 @@ export interface Env {
     MAX_TOTAL_DIFF_CHARS: string;
     FULL_FILE_MAX_LINES: string;
     CONTEXT_WINDOW_LINES: string;
+    APPROVE_ENABLED: string;
 }
 
 export interface ReviewJob {
@@ -36,4 +37,8 @@ export function limitsOf(env: Env): Limits {
         fullFileMaxLines: Number(env.FULL_FILE_MAX_LINES) || 1000,
         contextWindowLines: Number(env.CONTEXT_WINDOW_LINES) || 150,
     };
+}
+
+export function approveEnabled(env: Env): boolean {
+    return env.APPROVE_ENABLED === "true";
 }
