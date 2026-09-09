@@ -1,4 +1,6 @@
-# CodeSeer
+<p align="center"><img src="assets/logo.png" width="128" alt="CodeSeer logo"></p>
+
+<h1 align="center">CodeSeer</h1>
 
 English | [简体中文](README.zh-CN.md)
 

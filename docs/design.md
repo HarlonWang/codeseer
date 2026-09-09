@@ -71,7 +71,7 @@ webhook Worker 和 consumer 放同一个 Worker 项目，靠 queue 绑定区分 
 | 显示名 | CodeSeerBot |
 | slug | codeseerbot（评论区显示 `codeseerbot[bot]`） |
 | App id | 4845701 |
-| webhook | `https://codeseer.81813780.workers.dev/webhook` |
+| webhook | `https://<worker 域名>/webhook` |
 | 安装范围 | HarlonWang 账号，All repositories |
 | 订阅事件 | Pull request |
 | 权限 Pull requests | Read & write（读 PR、提交 review、resolve thread） |
