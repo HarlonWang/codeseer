@@ -35,7 +35,7 @@ Runs on Cloudflare Workers, reviews with OpenAI.
 3. `npm install && npm run deploy`, then set the App's webhook URL to `https://<your-worker>/webhook`
 4. Install the App on your account with "All repositories"
 
-Requires a Cloudflare Workers paid plan (Queues).
+Requires a Cloudflare Workers paid plan for Queues; the lowest tier ($5/month) is enough.
 
 ## Configuration
 

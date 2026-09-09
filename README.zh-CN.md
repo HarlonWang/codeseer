@@ -35,7 +35,7 @@
 3. `npm install && npm run deploy`，把 App 的 webhook 地址设为 `https://<你的 worker>/webhook`
 4. 把 App 装到账号下，范围选 All repositories
 
-需要 Cloudflare Workers 付费版（用到 Queues）。
+需要 Cloudflare Workers 付费版（用到 Queues），最低档每月 5 美元的就够。
 
 ## 配置
 
