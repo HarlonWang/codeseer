@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { triggerReason, verifySignature, type PullRequestEvent } from "../src/github/webhook";
+import { allowedOwners, type Env } from "../src/env";
+import { triggerReason as triggerReasonRaw, verifySignature, type PullRequestEvent } from "../src/github/webhook";
+
+const triggerReason = (event: string, payload: PullRequestEvent, owners = new Set(["o"])) => triggerReasonRaw(event, payload, owners);
 
 async function sign(secret: string, body: string): Promise<string> {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -41,5 +44,12 @@ describe("triggerReason", () => {
         expect(triggerReason("pull_request", event({ state: "closed" }, "synchronize"))).toEqual({ skip: "not open" });
         expect(triggerReason("pull_request", event({}, "closed"))).toEqual({ skip: "action closed" });
         expect(triggerReason("issues", event())).toEqual({ skip: "event issues" });
+    });
+
+    it("skips installations whose owner is not in ALLOWED_OWNERS, matching case-insensitively", () => {
+        const owners = allowedOwners({ ALLOWED_OWNERS: " HarlonWang, tiny-ui " } as Env);
+        expect(triggerReason("pull_request", event(), owners)).toEqual({ skip: "owner o" });
+        const mine = { ...event(), repository: { name: "r", owner: { login: "harlonwang" } } };
+        expect(triggerReason("pull_request", mine, owners)).toEqual({ ok: true });
     });
 });

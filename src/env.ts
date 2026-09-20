@@ -12,6 +12,7 @@ export interface Env {
     FULL_FILE_MAX_LINES: string;
     CONTEXT_WINDOW_LINES: string;
     APPROVE_ENABLED: string;
+    ALLOWED_OWNERS: string;
 }
 
 export interface ReviewJob {
@@ -37,6 +38,10 @@ export function limitsOf(env: Env): Limits {
         fullFileMaxLines: Number(env.FULL_FILE_MAX_LINES) || 1000,
         contextWindowLines: Number(env.CONTEXT_WINDOW_LINES) || 150,
     };
+}
+
+export function allowedOwners(env: Env): Set<string> {
+    return new Set(env.ALLOWED_OWNERS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
 }
 
 export function approveEnabled(env: Env): boolean {

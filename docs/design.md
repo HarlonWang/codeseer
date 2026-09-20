@@ -12,7 +12,7 @@
 | # | 决策 | 理由 |
 |---|------|------|
 | 1 | **GitHub App + Webhook 服务**，不用 GitHub Actions | Actions 要每仓放 workflow 文件，与动机二冲突；App 安装时选 All repositories，新仓自动覆盖 |
-| 2 | **单租户**，只服务 HarlonWang 账号 | 动机是自用替代收费工具，不预留多安装者结构，代码简单 |
+| 2 | **单租户**，只服务 HarlonWang 账号与 tiny-ui 组织 | 动机是自用替代收费工具，不预留多安装者结构，代码简单。tinyui 仓 2026-09-20 转入 tiny-ui 组织，私有 App 装不到组织，只能设为 public；public 意味着任何人可安装，所以 webhook 入口按 `ALLOWED_OWNERS` 白名单丢弃其他安装者的事件，不花额度也不去评论 |
 | 3 | **托管在 Cloudflare Workers 付费版**，webhook 入口与审查执行用 **Queues** 解耦 | 与 eventbase、loginbase 同栈；`waitUntil` 的后台时长扛不住几十秒到几分钟的模型调用，Queues consumer 有分钟级执行时间；付费版已有，零增量成本 |
 | 4 | **状态存 KV**，按 `repo + pr` 一条记录 | 只需按主键读写，不需要查询；D1 是过度设计 |
 | 5 | **模型用 OpenAI**，结构化输出（JSON schema）强制返回格式 | 型号动手时按当前列表按价格和能力定，不写死在文档 |
@@ -72,7 +72,7 @@ webhook Worker 和 consumer 放同一个 Worker 项目，靠 queue 绑定区分 
 | slug | codeseerbot（评论区显示 `codeseerbot[bot]`） |
 | App id | 4845701 |
 | webhook | `https://<worker 域名>/webhook` |
-| 安装范围 | HarlonWang 账号，All repositories |
+| 安装范围 | HarlonWang 账号与 tiny-ui 组织，各 All repositories；App 为 public，其余安装者被 `ALLOWED_OWNERS` 拦下 |
 | 订阅事件 | Pull request |
 | 权限 Pull requests | Read & write（读 PR、提交 review、resolve thread） |
 | 权限 Contents | Read & write（拉 diff 与 compare 只需 Read；`resolveReviewThread` 要求 Contents 写权限，2026-09-06 实测只给 Pull requests 写权限会报 Resource not accessible by integration） |

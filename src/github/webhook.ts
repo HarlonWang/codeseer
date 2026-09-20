@@ -37,8 +37,10 @@ export interface PullRequestEvent {
 
 const TRIGGER_ACTIONS = new Set(["opened", "reopened", "synchronize", "ready_for_review"]);
 
-export function triggerReason(event: string, payload: PullRequestEvent): { skip: string } | { ok: true } {
+export function triggerReason(event: string, payload: PullRequestEvent, allowedOwners: Set<string>): { skip: string } | { ok: true } {
     if (event !== "pull_request") return { skip: `event ${event}` };
+    // App 是 public 的，任何人都能安装；不在白名单的安装只会花 OpenAI 额度，直接丢弃
+    if (!allowedOwners.has(payload.repository.owner.login.toLowerCase())) return { skip: `owner ${payload.repository.owner.login}` };
     if (!TRIGGER_ACTIONS.has(payload.action)) return { skip: `action ${payload.action}` };
     if (payload.pull_request.draft) return { skip: "draft" };
     if (payload.pull_request.state !== "open") return { skip: "not open" };

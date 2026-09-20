@@ -15,6 +15,7 @@ MAX_TOTAL_DIFF_CHARS = "480000"
 FULL_FILE_MAX_LINES = "1000"
 CONTEXT_WINDOW_LINES = "150"
 APPROVE_ENABLED = "true"
+ALLOWED_OWNERS = "HarlonWang,tiny-ui"
 
 [[kv_namespaces]]
 binding = "STATE"

@@ -4,5 +4,5 @@ GitHub App 形态的 PR 审查机器人，跑在 Cloudflare Workers 上。**开�
 
 ## 边界
 
-- 单租户：只服务 HarlonWang 账号下的仓库，不做多租户结构
+- 单租户：只服务 HarlonWang 账号与 tiny-ui 组织下的仓库（`ALLOWED_OWNERS`），不做多租户结构
 - 第一版范围见 `docs/design.md` 的「不做」一节，范围外的需求先讨论再动手

@@ -50,6 +50,7 @@ Tunables live in `[vars]` of `wrangler.toml`; run `npm run deploy` after changin
 | `FULL_FILE_MAX_LINES` | `1000` | Changed files up to this length are sent in full; longer ones as windows around each hunk |
 | `CONTEXT_WINDOW_LINES` | `150` | Lines kept above and below each hunk in window mode |
 | `APPROVE_ENABLED` | `true` | Submit `APPROVE` when the criteria are met; `false` always comments |
+| `ALLOWED_OWNERS` | `HarlonWang,tiny-ui` | Repository owners (users or orgs) whose PRs get reviewed; the app is public, so any other installation is ignored |
 
 Code-level knobs:
 

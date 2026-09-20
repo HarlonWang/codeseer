@@ -50,6 +50,7 @@
 | `FULL_FILE_MAX_LINES` | `1000` | 改动文件不超过这个行数就喂全文，超过则只喂每个改动点周围的片段 |
 | `CONTEXT_WINDOW_LINES` | `150` | 片段模式下每个改动点上下各保留的行数 |
 | `APPROVE_ENABLED` | `true` | 满足判据时以 approve 提交；`false` 则一律只评论 |
+| `ALLOWED_OWNERS` | `HarlonWang,tiny-ui` | 只审这些账号/组织名下的仓库；App 是 public 的，其他安装者的 webhook 直接忽略 |
 
 需要改代码的项：
 

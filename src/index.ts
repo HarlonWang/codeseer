@@ -1,4 +1,4 @@
-import type { Env, ReviewJob } from "./env";
+import { allowedOwners, type Env, type ReviewJob } from "./env";
 import { triggerReason, verifySignature, type PullRequestEvent } from "./github/webhook";
 import { runReview, SkipReview } from "./review/pipeline";
 
@@ -10,7 +10,7 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
     const event = req.headers.get("x-github-event") ?? "";
     if (event === "ping") return new Response("pong");
     const payload = JSON.parse(body) as PullRequestEvent;
-    const verdict = triggerReason(event, payload);
+    const verdict = triggerReason(event, payload, allowedOwners(env));
     if ("skip" in verdict) return new Response(`ignored: ${verdict.skip}`, { status: 202 });
 
     const job: ReviewJob = {
