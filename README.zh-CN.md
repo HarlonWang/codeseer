@@ -19,12 +19,12 @@
 - 喂改动文件的全文，改动标记铺在全文上，改动行之外的问题也审得出来
 - push 新 commit 只审增量，上一轮意见被模型确认修掉的自动 resolve
 - 没有 high、medium 级意见且没有跳过的文件时批准（approve）PR，否则只留评论，不会 request changes
-- 审查评论用简体中文，改语言在 `src/review/prompt.ts` 的 `SYSTEM_PROMPT`
+- 审查评论默认英文，`REVIEW_LANGUAGE` 可切成简体中文
 
 ## 部署
 
 1. 建一个 GitHub App：订阅 `pull_request` 事件，权限给 Pull requests（读写）、Contents（读写，resolve thread 需要）、Metadata（读）。生成私钥和 webhook secret
-2. 把 App ID 填进 `wrangler.toml` 的 `GITHUB_APP_ID`，再设三样 secret：
+2. 在 `wrangler.toml` 里填 `GITHUB_APP_ID` 和 `ALLOWED_OWNERS`（要审哪些账号/组织的仓库），再设三样 secret：
 
    ```bash
    npx wrangler secret put GITHUB_PRIVATE_KEY
@@ -50,13 +50,14 @@
 | `FULL_FILE_MAX_LINES` | `1000` | 改动文件不超过这个行数就喂全文，超过则只喂每个改动点周围的片段 |
 | `CONTEXT_WINDOW_LINES` | `150` | 片段模式下每个改动点上下各保留的行数 |
 | `APPROVE_ENABLED` | `true` | 满足判据时以 approve 提交；`false` 则一律只评论 |
-| `ALLOWED_OWNERS` | `HarlonWang,tiny-ui` | 只审这些账号/组织名下的仓库；App 是 public 的，其他安装者的 webhook 直接忽略 |
+| `ALLOWED_OWNERS` | （空） | 只审这些账号/组织名下的仓库，逗号分隔；App 是 public 的，其他安装者的 webhook 直接忽略。留空则什么都不审 |
+| `REVIEW_LANGUAGE` | `en` | 审查评论的语言：`en` 或 `zh-CN` |
 
 需要改代码的项：
 
 - 忽略规则：`src/review/ignore.ts`
 - 只喂 diff 不喂全文的文件类型（文档、资源、配置）：`src/review/select.ts` 的 `DIFF_ONLY`
-- 审查口径与评论语言：`src/review/prompt.ts` 的 `SYSTEM_PROMPT`
+- 审查口径：`src/review/prompt.ts` 的 `systemPrompt`；各语言的评论文案：`src/review/messages.ts`
 - 触发事件：`src/github/webhook.ts` 的 `TRIGGER_ACTIONS`
 
 ## 运维

@@ -7,7 +7,7 @@ workers_dev = true
 enabled = true
 
 [vars]
-GITHUB_APP_ID = "4845701"
+GITHUB_APP_ID = ""
 OPENAI_MODEL = "gpt-5.6-terra"
 OPENAI_REASONING_EFFORT = "high"
 MAX_FILE_DIFF_LINES = "2000"
@@ -15,7 +15,8 @@ MAX_TOTAL_DIFF_CHARS = "480000"
 FULL_FILE_MAX_LINES = "1000"
 CONTEXT_WINDOW_LINES = "150"
 APPROVE_ENABLED = "true"
-ALLOWED_OWNERS = "HarlonWang,tiny-ui"
+ALLOWED_OWNERS = ""
+REVIEW_LANGUAGE = "en"
 
 [[kv_namespaces]]
 binding = "STATE"

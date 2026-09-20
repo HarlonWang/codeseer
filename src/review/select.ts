@@ -1,6 +1,7 @@
 import type { Limits } from "../env";
 import { annotate, annotateWithSource, changedLineCount, splitSource, type ContextMode, type DiffFile } from "./diff";
 import { ignoreReason } from "./ignore";
+import type { Messages } from "./messages";
 
 export interface SelectedFile {
     file: DiffFile;
@@ -21,19 +22,19 @@ export interface Selection {
 
 const DIFF_ONLY = /\.(md|txt|xml|json|ya?ml|toml|properties|svg|csv|html?)$/i;
 
-function skipReason(file: DiffFile, limits: Limits): string | null {
-    const ignored = ignoreReason(file.path);
+function skipReason(file: DiffFile, limits: Limits, m: Messages): string | null {
+    const ignored = ignoreReason(file.path, m);
     if (ignored) return ignored;
-    if (file.binary) return "二进制";
+    if (file.binary) return m.binary;
     const changed = changedLineCount(file);
-    if (changed > limits.maxFileDiffLines) return `diff 超过 ${limits.maxFileDiffLines} 行（${changed} 行）`;
+    if (changed > limits.maxFileDiffLines) return m.diffTooLarge(limits.maxFileDiffLines, changed);
     return null;
 }
 
-export function wantsSource(file: DiffFile, limits: Limits): boolean {
+export function wantsSource(file: DiffFile, limits: Limits, m: Messages): boolean {
     if (file.status !== "modified" && file.status !== "renamed") return false;
     if (file.hunks.length === 0 || DIFF_ONLY.test(file.path)) return false;
-    return skipReason(file, limits) === null;
+    return skipReason(file, limits, m) === null;
 }
 
 interface Candidate {
@@ -43,11 +44,11 @@ interface Candidate {
     richMissing: string | null;
 }
 
-export function selectFiles(files: DiffFile[], limits: Limits, sources: Map<string, string> = new Map()): Selection {
+export function selectFiles(files: DiffFile[], limits: Limits, m: Messages, sources: Map<string, string> = new Map()): Selection {
     const candidates: Candidate[] = [];
     const skipped: SkippedFile[] = [];
     for (const file of files) {
-        const reason = skipReason(file, limits);
+        const reason = skipReason(file, limits, m);
         if (reason) {
             skipped.push({ path: file.path, reason });
             continue;
@@ -55,12 +56,12 @@ export function selectFiles(files: DiffFile[], limits: Limits, sources: Map<stri
         if (file.hunks.length === 0) continue;
         let rich: Candidate["rich"] = null;
         let richMissing: string | null = null;
-        if (wantsSource(file, limits)) {
+        if (wantsSource(file, limits, m)) {
             const source = sources.get(file.path);
-            if (source === undefined) richMissing = "源文件未拉到";
+            if (source === undefined) richMissing = m.sourceMissing;
             else {
                 rich = annotateWithSource(file, splitSource(source), limits);
-                if (!rich) richMissing = "文件内容与 diff 不符";
+                if (!rich) richMissing = m.sourceMismatch;
             }
         }
         candidates.push({ file, diff: annotate(file), rich, richMissing });
@@ -83,12 +84,12 @@ export function selectFiles(files: DiffFile[], limits: Limits, sources: Map<stri
         const degrade = c.rich !== null && useDiff.has(c.file.path);
         const text = c.rich && !degrade ? c.rich.text : c.diff;
         if (text.length > budget) {
-            skipped.push({ path: c.file.path, reason: "本次审查总量已达上限" });
+            skipped.push({ path: c.file.path, reason: m.budgetExceeded });
             continue;
         }
         budget -= text.length;
         selected.push({ file: c.file, text, context: c.rich && !degrade ? c.rich.mode : "diff" });
-        if (degrade) degraded.push({ path: c.file.path, reason: "本次审查总量已达上限" });
+        if (degrade) degraded.push({ path: c.file.path, reason: m.budgetExceeded });
         else if (c.richMissing) degraded.push({ path: c.file.path, reason: c.richMissing });
     }
     return { selected, skipped, degraded };

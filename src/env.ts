@@ -13,6 +13,7 @@ export interface Env {
     CONTEXT_WINDOW_LINES: string;
     APPROVE_ENABLED: string;
     ALLOWED_OWNERS: string;
+    REVIEW_LANGUAGE: string;
 }
 
 export interface ReviewJob {
@@ -41,7 +42,9 @@ export function limitsOf(env: Env): Limits {
 }
 
 export function allowedOwners(env: Env): Set<string> {
-    return new Set(env.ALLOWED_OWNERS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+    const owners = new Set((env.ALLOWED_OWNERS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+    if (owners.size === 0) console.error("ALLOWED_OWNERS is empty: every webhook will be ignored");
+    return owners;
 }
 
 export function approveEnabled(env: Env): boolean {

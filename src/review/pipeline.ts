@@ -4,8 +4,9 @@ import { GitHubClient } from "../github/client";
 import { PullRequestApi, type ReviewThread } from "../github/pr";
 import { loadState, saveState, stateKey, type TrackedFinding } from "../state";
 import { parseDiff, remapOldLine, rightSideLines, touchesOldLine, type DiffFile } from "./diff";
+import { messagesOf } from "./messages";
 import { callModel } from "./model";
-import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt";
+import { buildUserPrompt, systemPrompt } from "./prompt";
 import { composeNoReviewBody, composeReviewBody, decideVerdict, partitionFindings, toReviewComments, type SeverityComment } from "./report";
 import { selectFiles, wantsSource } from "./select";
 
@@ -37,18 +38,19 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     const fromSha = incremental ? state!.lastReviewedSha : null;
 
     const limits = limitsOf(env);
+    const m = messagesOf(env.REVIEW_LANGUAGE);
     const scope = incremental ?? fullFiles;
-    const sources = await fetchSources(api, scope.filter((f) => wantsSource(f, limits)), job.headSha, tag);
-    const { selected, skipped, degraded } = selectFiles(scope, limits, sources);
+    const sources = await fetchSources(api, scope.filter((f) => wantsSource(f, limits, m)), job.headSha, tag);
+    const { selected, skipped, degraded } = selectFiles(scope, limits, m, sources);
 
     const { carried, toJudge } = await splitPreviousFindings(api, job.number, state?.findings ?? [], incremental);
 
     const approving = approveEnabled(env);
     if (selected.length === 0 && toJudge.length === 0) {
-        const verdict = decideVerdict({ findings: [], pending: carried, skipped });
+        const verdict = decideVerdict({ findings: [], pending: carried, skipped }, m);
         const event = approving && verdict.approve ? "APPROVE" : "COMMENT";
         if (event === "APPROVE" || skipped.length > 0) {
-            const body = composeNoReviewBody({ verdict: approving ? verdict : undefined, skipped, headSha: job.headSha });
+            const body = composeNoReviewBody({ verdict: approving ? verdict : undefined, skipped, headSha: job.headSha }, m);
             await api.createReview(job.number, job.headSha, body, [], event);
         }
         console.log(`${tag}: nothing to review (${mode}), ${event}`);
@@ -61,7 +63,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     console.log(
         `${tag}: files full=${contexts.filter((c) => c === "full").length} window=${contexts.filter((c) => c === "window").length} diff=${contexts.filter((c) => c === "diff").length} degraded=${degraded.length} chars=${user.length}`,
     );
-    const { output, usage } = await callModel(env, SYSTEM_PROMPT, user);
+    const { output, usage } = await callModel(env, systemPrompt(m), user);
     console.log(`${tag}: model ${env.OPENAI_MODEL} in=${usage.inputTokens} out=${usage.outputTokens} findings=${output.findings.length}`);
 
     const validLines = new Map<string, Set<number>>();
@@ -85,7 +87,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         }
     }
 
-    const verdict = decideVerdict({ findings: output.findings, pending: [...carried, ...stillOpen], skipped });
+    const verdict = decideVerdict({ findings: output.findings, pending: [...carried, ...stillOpen], skipped }, m);
     const body = composeReviewBody({
         verdict: approving ? verdict : undefined,
         mode,
@@ -100,8 +102,8 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         overflow,
         skipped,
         degraded,
-    });
-    const comments = toReviewComments(inline);
+    }, m);
+    const comments = toReviewComments(inline, m);
     const event = approving && verdict.approve ? "APPROVE" : "COMMENT";
     const review = await api.createReview(job.number, job.headSha, body, comments, event);
 

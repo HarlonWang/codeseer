@@ -1,9 +1,9 @@
 import type { ReviewComment } from "../github/pr";
 import type { TrackedFinding } from "../state";
+import type { Messages } from "./messages";
 import type { ModelFinding, Severity } from "./model";
 import type { SkippedFile } from "./select";
 
-const SEVERITY_LABEL: Record<Severity, string> = { high: "严重", medium: "建议", low: "细节" };
 const SEVERITY_RANK: Record<Severity, number> = { high: 2, medium: 1, low: 0 };
 
 function isBlocking(severity: Severity | undefined): boolean {
@@ -32,7 +32,7 @@ export interface SeverityComment extends ReviewComment {
     severity: Severity;
 }
 
-export function toReviewComments(findings: ValidFinding[]): SeverityComment[] {
+export function toReviewComments(findings: ValidFinding[], m: Messages): SeverityComment[] {
     const byKey = new Map<string, ValidFinding[]>();
     for (const f of findings) {
         const key = `${f.path}:${f.line}`;
@@ -43,7 +43,7 @@ export function toReviewComments(findings: ValidFinding[]): SeverityComment[] {
     return [...byKey.values()].map((group) => ({
         path: group[0].path,
         line: group[0].line,
-        body: group.map((f) => `**[${SEVERITY_LABEL[f.severity]}]** ${f.comment.trim()}`).join("\n\n"),
+        body: group.map((f) => `**[${m.severity[f.severity]}]** ${f.comment.trim()}`).join("\n\n"),
         severity: group.reduce((max, f) => (SEVERITY_RANK[f.severity] > SEVERITY_RANK[max] ? f.severity : max), group[0].severity),
     }));
 }
@@ -53,13 +53,13 @@ export interface Verdict {
     reasons: string[];
 }
 
-export function decideVerdict(input: { findings: ModelFinding[]; pending: TrackedFinding[]; skipped: SkippedFile[] }): Verdict {
+export function decideVerdict(input: { findings: ModelFinding[]; pending: TrackedFinding[]; skipped: SkippedFile[] }, m: Messages): Verdict {
     const reasons: string[] = [];
     const blockingNow = input.findings.filter((f) => f.comment.trim() && isBlocking(f.severity)).length;
     const blockingPending = input.pending.filter((f) => isBlocking(f.severity)).length;
-    if (blockingNow > 0) reasons.push(`本轮 ${blockingNow} 条严重或建议级意见`);
-    if (blockingPending > 0) reasons.push(`上轮 ${blockingPending} 条严重或建议级意见待处理`);
-    if (input.skipped.length > 0) reasons.push(`${input.skipped.length} 个文件未审查`);
+    if (blockingNow > 0) reasons.push(m.blockingNow(blockingNow));
+    if (blockingPending > 0) reasons.push(m.blockingPending(blockingPending));
+    if (input.skipped.length > 0) reasons.push(m.skippedCount(input.skipped.length));
     return { approve: reasons.length === 0, reasons };
 }
 
@@ -84,53 +84,53 @@ function excerpt(s: string, n = 80): string {
     return one.length > n ? `${one.slice(0, n)}…` : one;
 }
 
-function verdictLine(v: Verdict): string {
-    return v.approve ? "**结论**：批准" : `**结论**：不批准（${v.reasons.join("；")}）`;
+function verdictLine(v: Verdict, m: Messages): string {
+    return v.approve ? m.approved : m.notApproved(v.reasons);
 }
 
-export function composeReviewBody(input: ReportInput): string {
-    const parts: string[] = ["## CodeSeer 审查"];
-    if (input.verdict) parts.push(verdictLine(input.verdict));
+export function composeReviewBody(input: ReportInput, m: Messages): string {
+    const parts: string[] = [m.title];
+    if (input.verdict) parts.push(verdictLine(input.verdict, m));
     const previousTotal = input.judged.length + input.carried.length;
     if (previousTotal > 0) {
         const pending = [...input.carried, ...input.judged.filter((f) => !input.resolved.includes(f))];
-        const lines = [`**上轮意见**：${previousTotal} 条，已处理 ${input.resolved.length} 条，待处理 ${pending.length} 条`];
+        const lines = [m.previous(previousTotal, input.resolved.length, pending.length)];
         for (const f of pending) lines.push(`- \`${f.path}:${f.line}\` ${excerpt(f.comment)}`);
         if (input.resolveFailed.length > 0) {
-            lines.push("", "以下意见已处理，但标记 resolved 失败（原因见 Worker 日志），请手动 resolve：");
+            lines.push("", m.resolveFailed);
             for (const f of input.resolveFailed) lines.push(`- \`${f.path}:${f.line}\` ${excerpt(f.comment)}`);
         }
         parts.push(lines.join("\n"));
     }
-    parts.push(`### 摘要\n${input.summary.trim()}`);
+    parts.push(`${m.summary}\n${input.summary.trim()}`);
     if (input.overflow.length > 0) {
-        const lines = input.overflow.map((f) => `- \`${f.path}:${f.line}\` **[${SEVERITY_LABEL[f.severity]}]** ${f.comment.trim()}`);
-        parts.push(`### 其他意见\n不在改动行上，无法挂为行内评论：\n${lines.join("\n")}`);
+        const lines = input.overflow.map((f) => `- \`${f.path}:${f.line}\` **[${m.severity[f.severity]}]** ${f.comment.trim()}`);
+        parts.push(`${m.overflow}\n${lines.join("\n")}`);
     }
     if (input.degraded.length > 0) {
-        const lines = input.degraded.map((d) => `- \`${d.path}\`：${d.reason}`);
-        parts.push(`### 只按 diff 审查的文件\n${lines.join("\n")}`);
+        const lines = input.degraded.map((d) => m.item(d.path, d.reason));
+        parts.push(`${m.degraded}\n${lines.join("\n")}`);
     }
     if (input.skipped.length > 0) {
-        const lines = input.skipped.map((s) => `- \`${s.path}\`：${s.reason}`);
-        parts.push(`### 跳过的文件\n${lines.join("\n")}`);
+        const lines = input.skipped.map((s) => m.item(s.path, s.reason));
+        parts.push(`${m.skipped}\n${lines.join("\n")}`);
     }
     const scope =
         input.mode === "full"
-            ? `整个 PR 至 ${input.headSha.slice(0, 7)}`
-            : `增量 ${input.fromSha?.slice(0, 7)}..${input.headSha.slice(0, 7)}`;
+            ? m.scopeFull(input.headSha.slice(0, 7))
+            : m.scopeIncremental(input.fromSha?.slice(0, 7) ?? "", input.headSha.slice(0, 7));
     parts.push(`<sub>${scope} · ${input.model}</sub>`);
     return parts.join("\n\n");
 }
 
-export function composeNoReviewBody(input: { verdict?: Verdict; skipped: SkippedFile[]; headSha: string }): string {
-    const parts: string[] = ["## CodeSeer 审查"];
-    if (input.verdict) parts.push(verdictLine(input.verdict));
-    parts.push("本轮改动没有可审查的代码。");
+export function composeNoReviewBody(input: { verdict?: Verdict; skipped: SkippedFile[]; headSha: string }, m: Messages): string {
+    const parts: string[] = [m.title];
+    if (input.verdict) parts.push(verdictLine(input.verdict, m));
+    parts.push(m.nothingToReview);
     if (input.skipped.length > 0) {
-        const lines = input.skipped.map((s) => `- \`${s.path}\`：${s.reason}`);
-        parts.push(`### 跳过的文件\n${lines.join("\n")}`);
+        const lines = input.skipped.map((s) => m.item(s.path, s.reason));
+        parts.push(`${m.skipped}\n${lines.join("\n")}`);
     }
-    parts.push(`<sub>至 ${input.headSha.slice(0, 7)}</sub>`);
+    parts.push(`<sub>${m.upTo(input.headSha.slice(0, 7))}</sub>`);
     return parts.join("\n\n");
 }

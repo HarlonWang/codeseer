@@ -3,7 +3,12 @@ import { composeNoReviewBody, composeReviewBody, decideVerdict, partitionFinding
 import { ignoreReason } from "../src/review/ignore";
 import { selectFiles, wantsSource } from "../src/review/select";
 import { parseDiff } from "../src/review/diff";
+import { MESSAGES } from "../src/review/messages";
+import { systemPrompt } from "../src/review/prompt";
 import type { Limits } from "../src/env";
+
+const zh = MESSAGES["zh-CN"];
+const en = MESSAGES.en;
 
 const limits = (over: Partial<Limits>): Limits => ({ maxFileDiffLines: 10, maxTotalDiffChars: 1000, fullFileMaxLines: 1000, contextWindowLines: 150, ...over });
 
@@ -27,7 +32,7 @@ describe("partitionFindings", () => {
         const comments = toReviewComments([
             { path: "a.ts", line: 2, severity: "high", comment: "one" },
             { path: "a.ts", line: 2, severity: "low", comment: "two" },
-        ]);
+        ], zh);
         expect(comments).toHaveLength(1);
         expect(comments[0].body).toBe("**[严重]** one\n\n**[细节]** two");
         expect(comments[0].severity).toBe("high");
@@ -42,7 +47,7 @@ describe("decideVerdict", () => {
             findings: [{ path: "a.ts", line: 1, severity: "low", comment: "nit" }],
             pending: [{ threadId: "t", path: "b.ts", line: 2, comment: "old nit", severity: "low" }],
             skipped: skippedNone,
-        });
+        }, zh);
         expect(v).toEqual({ approve: true, reasons: [] });
     });
 
@@ -54,32 +59,32 @@ describe("decideVerdict", () => {
             ],
             pending: [],
             skipped: skippedNone,
-        });
+        }, zh);
         expect(v.approve).toBe(false);
         expect(v.reasons).toEqual(["本轮 1 条严重或建议级意见"]);
     });
 
     it("treats pending findings without severity as blocking", () => {
-        const v = decideVerdict({ findings: [], pending: [{ threadId: "t", path: "b.ts", line: 2, comment: "legacy" }], skipped: skippedNone });
+        const v = decideVerdict({ findings: [], pending: [{ threadId: "t", path: "b.ts", line: 2, comment: "legacy" }], skipped: skippedNone }, zh);
         expect(v.reasons).toEqual(["上轮 1 条严重或建议级意见待处理"]);
     });
 
     it("blocks when files were skipped", () => {
-        const v = decideVerdict({ findings: [], pending: [], skipped: [{ path: "huge.kt", reason: "太大" }] });
+        const v = decideVerdict({ findings: [], pending: [], skipped: [{ path: "huge.kt", reason: "太大" }] }, zh);
         expect(v.reasons).toEqual(["1 个文件未审查"]);
     });
 });
 
 describe("composeNoReviewBody", () => {
     it("states the approval and scope", () => {
-        const body = composeNoReviewBody({ verdict: { approve: true, reasons: [] }, skipped: [], headSha: "bbbbbbb2" });
+        const body = composeNoReviewBody({ verdict: { approve: true, reasons: [] }, skipped: [], headSha: "bbbbbbb2" }, zh);
         expect(body).toContain("**结论**：批准");
         expect(body).not.toContain("### 跳过的文件");
         expect(body).toContain("至 bbbbbbb<");
     });
 
     it("lists skipped files with the refusal reason", () => {
-        const body = composeNoReviewBody({ verdict: { approve: false, reasons: ["1 个文件未审查"] }, skipped: [{ path: "huge.kt", reason: "太大" }], headSha: "bbbbbbb2" });
+        const body = composeNoReviewBody({ verdict: { approve: false, reasons: ["1 个文件未审查"] }, skipped: [{ path: "huge.kt", reason: "太大" }], headSha: "bbbbbbb2" }, zh);
         expect(body).toContain("**结论**：不批准（1 个文件未审查）");
         expect(body).toContain("- `huge.kt`：太大");
     });
@@ -101,7 +106,7 @@ describe("composeReviewBody", () => {
             overflow: [{ path: "c.ts", line: 99, severity: "medium", comment: "somewhere" }],
             skipped: [{ path: "package-lock.json", reason: "lock 文件" }],
             degraded: [{ path: "big.kt", reason: "本次审查总量已达上限" }],
-        });
+        }, zh);
         expect(body).toContain("**上轮意见**：2 条，已处理 1 条，待处理 1 条");
         expect(body).toContain("- `b.ts:5` still open");
         expect(body).toContain("标记 resolved 失败");
@@ -116,28 +121,44 @@ describe("composeReviewBody", () => {
 
     it("prints the verdict when given", () => {
         const base = { mode: "full" as const, fromSha: null, headSha: "bbbbbbb2", model: "m", summary: "s", judged: [], resolved: [], resolveFailed: [], carried: [], overflow: [], skipped: [], degraded: [] };
-        expect(composeReviewBody({ ...base, verdict: { approve: true, reasons: [] } })).toContain("**结论**：批准\n");
-        expect(composeReviewBody({ ...base, verdict: { approve: false, reasons: ["a", "b"] } })).toContain("**结论**：不批准（a；b）");
+        expect(composeReviewBody({ ...base, verdict: { approve: true, reasons: [] } }, zh)).toContain("**结论**：批准\n");
+        expect(composeReviewBody({ ...base, verdict: { approve: false, reasons: ["a", "b"] } }, zh)).toContain("**结论**：不批准（a；b）");
+    });
+});
+
+describe("review language", () => {
+    it("renders the whole report in English when REVIEW_LANGUAGE is en", () => {
+        const base = { mode: "full" as const, fromSha: null, headSha: "bbbbbbb2", model: "m", summary: "s", judged: [], resolved: [], resolveFailed: [], carried: [], overflow: [], degraded: [] };
+        const skipped = [{ path: "package-lock.json", reason: ignoreReason("package-lock.json", en)! }];
+        const verdict = decideVerdict({ findings: [{ path: "a.ts", line: 1, severity: "medium", comment: "x" }], pending: [], skipped }, en);
+        const body = composeReviewBody({ ...base, skipped, verdict }, en);
+        expect(body).toContain("## CodeSeer review");
+        expect(body).toContain("**Verdict**: not approved (1 high or medium finding this round; 1 file not reviewed)");
+        expect(body).toContain("- `package-lock.json`: lock file");
+        expect(body).toContain("whole PR up to bbbbbbb");
+        expect(body).not.toMatch(/[\u4e00-\u9fa5]/);
+        expect(systemPrompt(en)).toContain("Write in English");
+        expect(systemPrompt(zh)).toContain("用简体中文写");
     });
 });
 
 describe("ignore and select", () => {
     it("classifies ignored paths", () => {
-        expect(ignoreReason("package-lock.json")).toBe("lock 文件");
-        expect(ignoreReason("gradle/wrapper/gradle-wrapper.jar")).toBe("二进制资源");
-        expect(ignoreReason("web/dist/app.js")).toBe("生成或第三方目录");
-        expect(ignoreReason("lib/x.min.js")).toBe("生成文件");
-        expect(ignoreReason("src/main.kt")).toBeNull();
+        expect(ignoreReason("package-lock.json", zh)).toBe("lock 文件");
+        expect(ignoreReason("gradle/wrapper/gradle-wrapper.jar", zh)).toBe("二进制资源");
+        expect(ignoreReason("web/dist/app.js", zh)).toBe("生成或第三方目录");
+        expect(ignoreReason("lib/x.min.js", zh)).toBe("生成文件");
+        expect(ignoreReason("src/main.kt", zh)).toBeNull();
     });
 
     it("applies per-file and total limits", () => {
         const big = ["diff --git a/big.ts b/big.ts", "--- a/big.ts", "+++ b/big.ts", "@@ -0,0 +1,3 @@", "+1", "+2", "+3"].join("\n");
         const small = ["diff --git a/s.ts b/s.ts", "--- a/s.ts", "+++ b/s.ts", "@@ -0,0 +1 @@", "+x"].join("\n");
         const files = parseDiff(`${big}\n${small}\n`);
-        const { selected, skipped } = selectFiles(files, limits({ maxFileDiffLines: 2 }));
+        const { selected, skipped } = selectFiles(files, limits({ maxFileDiffLines: 2 }), zh);
         expect(selected.map((s) => s.file.path)).toEqual(["s.ts"]);
         expect(skipped[0].reason).toContain("diff 超过 2 行");
-        const tight = selectFiles(files, limits({ maxTotalDiffChars: 40 }));
+        const tight = selectFiles(files, limits({ maxTotalDiffChars: 40 }), zh);
         expect(tight.selected.map((s) => s.file.path)).toEqual(["s.ts"]);
         expect(tight.skipped[0].reason).toBe("本次审查总量已达上限");
     });
@@ -148,9 +169,9 @@ describe("ignore and select", () => {
 
     it("attaches full source to modified code files only", () => {
         const files = parseDiff(`${modified("a.kt")}\n${modified("README.md")}\n`);
-        expect(wantsSource(files[0], limits({}))).toBe(true);
-        expect(wantsSource(files[1], limits({}))).toBe(false);
-        const { selected, degraded } = selectFiles(files, limits({}), new Map([["a.kt", source(5)], ["README.md", source(5)]]));
+        expect(wantsSource(files[0], limits({}), zh)).toBe(true);
+        expect(wantsSource(files[1], limits({}), zh)).toBe(false);
+        const { selected, degraded } = selectFiles(files, limits({}), zh, new Map([["a.kt", source(5)], ["README.md", source(5)]]));
         expect(selected.map((s) => [s.file.path, s.context])).toEqual([
             ["a.kt", "full"],
             ["README.md", "diff"],
@@ -161,19 +182,19 @@ describe("ignore and select", () => {
 
     it("falls back to diff when the source does not match the hunk", () => {
         const files = parseDiff(`${modified("a.kt")}\n`);
-        const { selected, degraded } = selectFiles(files, limits({}), new Map([["a.kt", "x\ny\nz"]]));
+        const { selected, degraded } = selectFiles(files, limits({}), zh, new Map([["a.kt", "x\ny\nz"]]));
         expect(selected[0].context).toBe("diff");
         expect(degraded).toEqual([{ path: "a.kt", reason: "文件内容与 diff 不符" }]);
-        expect(selectFiles(files, limits({})).degraded).toEqual([{ path: "a.kt", reason: "源文件未拉到" }]);
+        expect(selectFiles(files, limits({}), zh).degraded).toEqual([{ path: "a.kt", reason: "源文件未拉到" }]);
     });
 
     it("does not degrade a file whose full text is no longer than its diff", () => {
         const whole = ["diff --git a/w.kt b/w.kt", "--- a/w.kt", "+++ b/w.kt", "@@ -1,2 +1,2 @@", "-a", "-b", "+x", "+y"].join("\n");
         const files = parseDiff(`${whole}\n`);
         const sources = new Map([["w.kt", "x\ny\n"]]);
-        const roomy = selectFiles(files, limits({}), sources);
+        const roomy = selectFiles(files, limits({}), zh, sources);
         expect(roomy.selected[0].context).toBe("full");
-        const tight = selectFiles(files, limits({ maxTotalDiffChars: roomy.selected[0].text.length - 1 }), sources);
+        const tight = selectFiles(files, limits({ maxTotalDiffChars: roomy.selected[0].text.length - 1 }), zh, sources);
         expect(tight.selected).toEqual([]);
         expect(tight.degraded).toEqual([]);
         expect(tight.skipped[0].reason).toBe("本次审查总量已达上限");
@@ -182,10 +203,10 @@ describe("ignore and select", () => {
     it("degrades the largest full files first when over the total budget", () => {
         const files = parseDiff(`${modified("small.kt")}\n${modified("big.kt")}\n`);
         const sources = new Map([["small.kt", source(5)], ["big.kt", source(40)]]);
-        const roomy = selectFiles(files, limits({}), sources);
+        const roomy = selectFiles(files, limits({}), zh, sources);
         expect(roomy.selected.map((s) => s.context)).toEqual(["full", "full"]);
         const total = roomy.selected.reduce((sum, s) => sum + s.text.length, 0);
-        const tight = selectFiles(files, limits({ maxTotalDiffChars: total - 1 }), sources);
+        const tight = selectFiles(files, limits({ maxTotalDiffChars: total - 1 }), zh, sources);
         expect(tight.selected.map((s) => [s.file.path, s.context])).toEqual([
             ["small.kt", "full"],
             ["big.kt", "diff"],

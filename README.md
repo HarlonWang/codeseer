@@ -19,12 +19,12 @@ Runs on Cloudflare Workers, reviews with OpenAI.
 - Reads the full content of changed source files, with the diff marked on top, so problems outside the changed lines are caught
 - On new commits, reviews only the increment and resolves earlier threads the model confirms as fixed
 - Approves the PR when there are no high or medium findings and no skipped files; otherwise leaves a comment. It never requests changes
-- Review comments are written in Simplified Chinese. Change the language in `SYSTEM_PROMPT` in `src/review/prompt.ts`
+- Review comments are written in English by default; `REVIEW_LANGUAGE` switches them to Simplified Chinese
 
 ## Deploy
 
 1. Create a GitHub App: subscribe to the `pull_request` event, grant Pull requests (read & write), Contents (read & write, required by thread resolving) and Metadata (read). Generate a private key and a webhook secret
-2. Put the App ID in `wrangler.toml` (`GITHUB_APP_ID`), then set the three secrets:
+2. In `wrangler.toml`, fill in `GITHUB_APP_ID` and `ALLOWED_OWNERS` (the users or orgs whose PRs get reviewed), then set the three secrets:
 
    ```bash
    npx wrangler secret put GITHUB_PRIVATE_KEY
@@ -50,13 +50,14 @@ Tunables live in `[vars]` of `wrangler.toml`; run `npm run deploy` after changin
 | `FULL_FILE_MAX_LINES` | `1000` | Changed files up to this length are sent in full; longer ones as windows around each hunk |
 | `CONTEXT_WINDOW_LINES` | `150` | Lines kept above and below each hunk in window mode |
 | `APPROVE_ENABLED` | `true` | Submit `APPROVE` when the criteria are met; `false` always comments |
-| `ALLOWED_OWNERS` | `HarlonWang,tiny-ui` | Repository owners (users or orgs) whose PRs get reviewed; the app is public, so any other installation is ignored |
+| `ALLOWED_OWNERS` | (empty) | Repository owners (users or orgs) whose PRs get reviewed, comma-separated; the app is public, so any other installation is ignored. Empty means nothing is reviewed |
+| `REVIEW_LANGUAGE` | `en` | Language of the review comments: `en` or `zh-CN` |
 
 Code-level knobs:
 
 - Ignore rules: `src/review/ignore.ts`
 - File types sent as diff only (docs, assets, config): `DIFF_ONLY` in `src/review/select.ts`
-- Review criteria and comment language: `SYSTEM_PROMPT` in `src/review/prompt.ts`
+- Review criteria: `systemPrompt` in `src/review/prompt.ts`; comment wording per language: `src/review/messages.ts`
 - Trigger events: `TRIGGER_ACTIONS` in `src/github/webhook.ts`
 
 ## Operations
