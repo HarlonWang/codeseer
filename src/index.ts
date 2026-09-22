@@ -1,5 +1,6 @@
 import { allowedOwners, type Env, type ReviewJob } from "./env";
 import { triggerReason, verifySignature, type PullRequestEvent } from "./github/webhook";
+import { enqueue } from "./queue";
 import { runReview, SkipReview } from "./review/pipeline";
 
 async function handleWebhook(req: Request, env: Env): Promise<Response> {
@@ -21,7 +22,13 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
         installationId: payload.installation!.id,
         enqueuedAt: new Date().toISOString(),
     };
-    await env.REVIEW_QUEUE.send(job);
+    try {
+        await enqueue(env.REVIEW_QUEUE, job);
+    } catch (e) {
+        // GitHub does not redeliver on its own: the delivery has to be replayed from the App's Recent Deliveries
+        console.error(`dropped ${job.owner}/${job.repo}#${job.number}@${job.headSha.slice(0, 7)}: queue send failed: ${e instanceof Error ? e.message : String(e)}`);
+        return new Response("queue unavailable", { status: 503 });
+    }
     return new Response("queued", { status: 202 });
 }
 

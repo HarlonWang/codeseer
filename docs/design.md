@@ -185,6 +185,7 @@ App slug 用 `codeseerbot`：GitHub 不允许 App 名与任何已有账号同名
 
 - 静默失败是 App 形态相比 Actions 的主要代价：Worker 挂了或模型超时，PR 上就没评论。第一版至少在 consumer 里把失败写进 Workers Logs，Queues 配 dead letter queue 兜底
 - Queues 的重试对模型调用要谨慎：一次任务失败重试会再花一次模型费用，重试次数限制在个位数
+- webhook 入口的 `Queue.send` 会遇到 Queues 的过载错误（`Queue is overloaded. Please back off. (10250)`，2026-09-22 在 tiny-ui/tinyui#14 打开时踩到，该次审查静默丢失）。入口对 send 做 250 / 500 / 1000 ms 三次退避重试（`src/queue.ts`），仍失败返回 503 并记 `dropped …` 日志；GitHub 不会自动重发 webhook，此时要到 App 设置的 Recent Deliveries 手动 Redeliver
 
 ## 12. 费用与选型
 
