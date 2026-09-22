@@ -1,4 +1,4 @@
-import { approveEnabled, limitsOf, type Env, type ReviewJob } from "../env";
+import { approveEnabled, jobTag, limitsOf, type Env, type ReviewJob } from "../env";
 import { appJwt, installationToken } from "../github/auth";
 import { GitHubClient } from "../github/client";
 import { PullRequestApi, type ReviewThread } from "../github/pr";
@@ -7,24 +7,44 @@ import { parseDiff, remapOldLine, rightSideLines, touchesOldLine, type DiffFile 
 import { messagesOf } from "./messages";
 import { callModel } from "./model";
 import { buildUserPrompt, systemPrompt } from "./prompt";
-import { composeNoReviewBody, composeReviewBody, decideVerdict, partitionFindings, toReviewComments, type SeverityComment } from "./report";
+import {
+    composeCheckTitle,
+    composeNoReviewBody,
+    composeReviewBody,
+    decideVerdict,
+    partitionFindings,
+    toReviewComments,
+    type SeverityComment,
+} from "./report";
 import { selectFiles, wantsSource } from "./select";
 
-export class SkipReview extends Error {}
+export class SkipReview extends Error {
+    constructor(
+        message: string,
+        readonly reason: string,
+    ) {
+        super(message);
+    }
+}
 
-export async function runReview(job: ReviewJob, env: Env): Promise<void> {
-    const tag = `${job.owner}/${job.repo}#${job.number}@${job.headSha.slice(0, 7)}`;
+export interface ReviewOutcome {
+    checkTitle: string;
+}
+
+export async function runReview(job: ReviewJob, env: Env): Promise<ReviewOutcome> {
+    const tag = jobTag(job);
     const jwt = await appJwt(env.GITHUB_APP_ID, env.GITHUB_PRIVATE_KEY);
     const token = await installationToken(jwt, job.installationId);
     const api = new PullRequestApi(new GitHubClient(token), job.owner, job.repo);
 
+    const m = messagesOf(env.REVIEW_LANGUAGE);
     const pr = await api.get(job.number);
-    if (pr.state !== "open") throw new SkipReview(`${tag}: PR ${pr.state}`);
-    if (pr.headSha !== job.headSha) throw new SkipReview(`${tag}: head moved to ${pr.headSha.slice(0, 7)}`);
+    if (pr.state !== "open") throw new SkipReview(`${tag}: PR ${pr.state}`, m.skipNotOpen);
+    if (pr.headSha !== job.headSha) throw new SkipReview(`${tag}: head moved to ${pr.headSha.slice(0, 7)}`, m.skipHeadMoved);
 
     const key = stateKey(job.owner, job.repo, job.number);
     const state = await loadState(env.STATE, key);
-    if (state?.lastReviewedSha === job.headSha) throw new SkipReview(`${tag}: already reviewed`);
+    if (state?.lastReviewedSha === job.headSha) throw new SkipReview(`${tag}: already reviewed`, m.skipAlreadyReviewed);
 
     const fullFiles = parseDiff(await api.diff(job.number));
     const fullByPath = new Map(fullFiles.map((f) => [f.path, f]));
@@ -38,7 +58,6 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     const fromSha = incremental ? state!.lastReviewedSha : null;
 
     const limits = limitsOf(env);
-    const m = messagesOf(env.REVIEW_LANGUAGE);
     const scope = incremental ?? fullFiles;
     const sources = await fetchSources(api, scope.filter((f) => wantsSource(f, limits, m)), job.headSha, tag);
     const { selected, skipped, degraded } = selectFiles(scope, limits, m, sources);
@@ -55,7 +74,12 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         }
         console.log(`${tag}: nothing to review (${mode}), ${event}`);
         await saveState(env.STATE, key, { lastReviewedSha: job.headSha, findings: carried });
-        return;
+        return {
+            checkTitle: composeCheckTitle(
+                { findings: 0, previousTotal: 0, resolved: 0, pending: 0, skipped: skipped.length, approved: event === "APPROVE", nothingToReview: true },
+                m,
+            ),
+        };
     }
 
     const user = buildUserPrompt({ owner: job.owner, repo: job.repo, pr, mode, fromSha, files: selected, toJudge });
@@ -71,7 +95,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
     const { inline, overflow } = partitionFindings(output.findings, validLines);
 
     const fresh = await api.get(job.number);
-    if (fresh.headSha !== job.headSha) throw new SkipReview(`${tag}: superseded by ${fresh.headSha.slice(0, 7)}`);
+    if (fresh.headSha !== job.headSha) throw new SkipReview(`${tag}: superseded by ${fresh.headSha.slice(0, 7)}`, m.skipHeadMoved);
 
     const resolvedIdx = new Set(output.resolved);
     const resolved: TrackedFinding[] = [];
@@ -114,6 +138,20 @@ export async function runReview(job: ReviewJob, env: Env): Promise<void> {
         findings: [...carried, ...remapStillOpen(stillOpen, incremental), ...tracked],
     });
     console.log(`${tag}: ${event} with ${comments.length} inline, resolved ${resolved.length}, carried ${carried.length + stillOpen.length}`);
+    return {
+        checkTitle: composeCheckTitle(
+            {
+                findings: inline.length + overflow.length,
+                previousTotal: toJudge.length + carried.length,
+                resolved: resolved.length,
+                pending: carried.length + stillOpen.length,
+                skipped: skipped.length,
+                approved: event === "APPROVE",
+                nothingToReview: false,
+            },
+            m,
+        ),
+    };
 }
 
 const FETCH_CONCURRENCY = 6;

@@ -30,6 +30,7 @@
 3. 已处理判定：上一轮意见被修掉的自动 resolve，summary 开头汇报上轮 N 条、已处理 M 条、待处理 K 条
 4. 全局忽略规则：lock 文件、生成代码、二进制、vendored 代码不审；单文件 diff 超阈值跳过并在 summary 里说明
 5. 批准：本轮没有阻塞级意见时以 `APPROVE` 提交 review，计入分支保护的 approval 数（见第 7.5 节）
+6. 审查状态回报到 PR 的 checks 区：一个 check run 显示审查中 / 结果摘要 / 失败原因，失败时另发一条评论（见第 11 节）
 
 不做（第一版）：
 
@@ -76,6 +77,7 @@ webhook Worker 和 consumer 放同一个 Worker 项目，靠 queue 绑定区分 
 | 订阅事件 | Pull request |
 | 权限 Pull requests | Read & write（读 PR、提交 review、resolve thread） |
 | 权限 Contents | Read & write（拉 diff 与 compare 只需 Read；`resolveReviewThread` 要求 Contents 写权限，2026-09-06 实测只给 Pull requests 写权限会报 Resource not accessible by integration） |
+| 权限 Checks | Read & write（建 check run 回报审查状态；2026-09-22 加，此前装好的安装需要在设置页接受新权限） |
 | 权限 Metadata | Read（必选） |
 
 权限按最小集申请，之后要加再改。Contents 写权限是被 resolve 接口逼出来的，代码里没有任何写 Contents 的调用。
@@ -183,7 +185,27 @@ App slug 用 `codeseerbot`：GitHub 不允许 App 名与任何已有账号同名
 
 ## 11. 故障与可观测
 
-- 静默失败是 App 形态相比 Actions 的主要代价：Worker 挂了或模型超时，PR 上就没评论。第一版至少在 consumer 里把失败写进 Workers Logs，Queues 配 dead letter queue 兜底
+静默失败是 App 形态相比 Actions 的主要代价：Worker 挂了或模型超时，PR 上什么都不会出现，只能靠「怎么半天没评论」察觉。审查状态因此回报到 PR 上，分三段，缺任何一段都有覆盖不到的故障：
+
+| 段 | 位置 | 负责的故障 |
+|----|------|-----------|
+| 建 check run（`in_progress`） | webhook 入口，入队之前 | 入队本身失败——消息没进队列，consumer 和死信队列都看不到这一轮 |
+| 收 check run（`success` / `skipped`） | consumer 正常结束 | —— |
+| 兜底收成 `failure` 并发评论 | 死信队列的 consumer | 重试耗尽，以及 consumer 被超时或 OOM 打死、没机会自己收尾 |
+
+几处必须如此的理由：
+
+- **check run 要在入队前建**：consumer 只能通过消息里的 `check_run_id` 给它收尾，入队之后再建可能赶不上消费
+- **第三段不能省**：`in_progress` 的 check 没人收尾就会在 PR 顶部留一个永远转圈的检查项，比原来的静默更碍眼。要么三段齐全，要么一段都不做
+- **失败原因要 consumer 自己存**：死信队列只递原消息，不带异常。consumer 每次失败把原因写进 KV（`fail:owner/repo#pr@sha`，6 小时过期），死信 consumer 读出来填进 check 与评论，读完即删
+- **重试中不动 check**：中途置 failure 会让还会成功的那轮先红一下。consumer 判断不了自己是不是最后一次尝试（`max_retries` 在 wrangler.toml 里，代码里再写一份必然漂移），所以一律交给死信 consumer 判定
+- **check run 的 name 固定为 `CodeSeer review`**，不随 `REVIEW_LANGUAGE` 变：分支保护和轮询脚本按 name 认这个检查项，翻译一次等于换了一个检查项
+- **汇报全程 fail-soft**：`src/status.ts` 的每个入口自己吞异常。Checks 权限没配到位时后果应当是 PR 上少一个检查项，而不是整轮审查失败
+
+check run 只报告，不设 required：机器人不卡合并这条与第 7 节第 7 项一致。
+
+其余：
+
 - Queues 的重试对模型调用要谨慎：一次任务失败重试会再花一次模型费用，重试次数限制在个位数
 - webhook 入口的 `Queue.send` 会遇到 Queues 的过载错误（`Queue is overloaded. Please back off. (10250)`，2026-09-22 在 tiny-ui/tinyui#14 打开时踩到，该次审查静默丢失）。入口对 send 做 250 / 500 / 1000 ms 三次退避重试（`src/queue.ts`），仍失败返回 503 并记 `dropped …` 日志；GitHub 不会自动重发 webhook，此时要到 App 设置的 Recent Deliveries 手动 Redeliver
 

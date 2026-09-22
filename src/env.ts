@@ -23,6 +23,11 @@ export interface ReviewJob {
     headSha: string;
     installationId: number;
     enqueuedAt: string;
+    checkRunId?: number;
+}
+
+export function jobTag(job: ReviewJob): string {
+    return `${job.owner}/${job.repo}#${job.number}@${job.headSha.slice(0, 7)}`;
 }
 
 export interface Limits {
