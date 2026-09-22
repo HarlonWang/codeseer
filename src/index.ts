@@ -34,7 +34,7 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
     } catch (e) {
         // GitHub does not redeliver on its own: the delivery has to be replayed from the App's Recent Deliveries
         console.error(`dropped ${jobTag(job)}: queue send failed: ${err(e)}`);
-        await settleCheck(env, job, "failure", messagesOf(env.REVIEW_LANGUAGE).checkDropped);
+        await settleCheck(env, job, { conclusion: "failure", title: messagesOf(env.REVIEW_LANGUAGE).checkDropped, quick: true });
         return new Response("queue unavailable", { status: 503 });
     }
     return new Response("queued", { status: 202 });
@@ -57,12 +57,12 @@ async function handleReview(batch: MessageBatch<ReviewJob>, env: Env): Promise<v
         const job = msg.body;
         try {
             const outcome = await runReview(job, env);
-            await settleCheck(env, job, "success", outcome.checkTitle);
+            await settleCheck(env, job, { conclusion: "success", title: outcome.checkTitle });
             msg.ack();
         } catch (e) {
             if (e instanceof SkipReview) {
                 console.log(`skip: ${e.message}`);
-                await settleCheck(env, job, "skipped", e.reason);
+                await settleCheck(env, job, { conclusion: "skipped", title: e.reason });
                 msg.ack();
                 continue;
             }

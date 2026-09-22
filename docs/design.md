@@ -199,7 +199,8 @@ App slug 用 `codeseerbot`：GitHub 不允许 App 名与任何已有账号同名
 - **第三段不能省**：`in_progress` 的 check 没人收尾就会在 PR 顶部留一个永远转圈的检查项，比原来的静默更碍眼。要么三段齐全，要么一段都不做
 - **失败原因要 consumer 自己存**：死信队列只递原消息，不带异常。consumer 每次失败把原因写进 KV（`fail:owner/repo#pr@sha`，6 小时过期），死信 consumer 读出来填进 check 与评论，读完即删
 - **重试中不动 check**：中途置 failure 会让还会成功的那轮先红一下。consumer 判断不了自己是不是最后一次尝试（`max_retries` 在 wrangler.toml 里，代码里再写一份必然漂移），所以一律交给死信 consumer 判定
-- **收尾自己退避重试**（`src/retry.ts`，与入队共用）：收尾失败后消息已经 ack，没有第二次机会，那个 check 会一直转圈。不把消息改成失败重投，是因为重投只会让 `runReview` 撞上「该 commit 已审过」，把一轮成功的审查收成灰色的 skipped，标题里的结果反而丢了
+- **收尾自己退避重试**（`src/retry.ts`，与入队共用两套节奏：入口 250/500/1000 ms，收尾 500/1000/2000/4000 ms）：收尾失败后消息已经 ack，没有第二次机会，那个 check 会一直转圈。不把消息改成失败重投，是因为重投只会让 `runReview` 撞上「该 commit 已审过」，把一轮成功的审查收成灰色的 skipped，标题里的结果反而丢了
+- **收尾重试耗尽后不再补偿**，接受 check 残留在 `in_progress`：要覆盖 GitHub 持续故障超过 7.5 秒的情况，得另起一条收尾任务队列或定时扫 KV，这个复杂度与后果不匹配——PR 的 checks 区只显示 head commit 的检查项，推下一个 commit 残留就不再露面，而且这个 check 不设 required，不卡合并
 - **失败评论不断言「没有产出意见」**：`createReview` 之后的步骤（拉 thread、写 KV）出错时 PR 上已经有本轮评论，措辞只说未正常结束、已有评论可能不完整
 - **check run 的 name 固定为 `CodeSeer review`**，不随 `REVIEW_LANGUAGE` 变：分支保护和轮询脚本按 name 认这个检查项，翻译一次等于换了一个检查项
 - **汇报全程 fail-soft**：`src/status.ts` 的每个入口自己吞异常。Checks 权限没配到位时后果应当是 PR 上少一个检查项，而不是整轮审查失败

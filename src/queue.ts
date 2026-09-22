@@ -8,6 +8,6 @@ export async function enqueue<T>(queue: Queue<T>, message: T, sleep?: (ms: numbe
     await retrying(
         () => queue.send(message),
         (attempt, delay, e) => console.warn(`queue send failed (attempt ${attempt}), retrying in ${delay} ms: ${e instanceof Error ? e.message : String(e)}`),
-        sleep,
+        { sleep },
     );
 }

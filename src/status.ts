@@ -3,7 +3,7 @@ import { appJwt, installationToken } from "./github/auth";
 import { ChecksApi, clamp, type CheckConclusion } from "./github/checks";
 import { GitHubClient } from "./github/client";
 import { PullRequestApi } from "./github/pr";
-import { retrying } from "./retry";
+import { PATIENT_RETRIES, QUICK_RETRIES, retrying } from "./retry";
 import { takeFailure } from "./state";
 import { messagesOf } from "./review/messages";
 
@@ -24,17 +24,26 @@ export async function startCheck(env: Env, job: ReviewJob): Promise<number | und
     }
 }
 
+export interface CheckResult {
+    conclusion: CheckConclusion;
+    title: string;
+    summary?: string;
+    /** webhook 入口的 10 秒预算下用快档；consumer 里默认用慢档，多等几秒也要把 check 收掉。 */
+    quick?: boolean;
+}
+
 /** 收尾比建更要紧：收不掉就是 PR 上一个永远转圈的检查项，所以这一步退避重试过再认输。 */
-export async function settleCheck(env: Env, job: ReviewJob, conclusion: CheckConclusion, title: string, summary = ""): Promise<void> {
+export async function settleCheck(env: Env, job: ReviewJob, result: CheckResult): Promise<void> {
     const id = job.checkRunId;
     if (id === undefined) return;
     try {
         await retrying(
             async () => {
                 const checks = new ChecksApi(await client(env, job), job.owner, job.repo);
-                await checks.finish(id, conclusion, title, summary);
+                await checks.finish(id, result.conclusion, result.title, result.summary ?? "");
             },
             (attempt, delay, e) => console.warn(`${jobTag(job)}: settle check failed (attempt ${attempt}), retrying in ${delay} ms: ${err(e)}`),
+            { delays: result.quick ? QUICK_RETRIES : PATIENT_RETRIES },
         );
     } catch (e) {
         console.error(`${jobTag(job)}: settle check gave up, run ${id} stays in progress: ${err(e)}`);
@@ -50,7 +59,7 @@ export async function reportDeadLetter(env: Env, job: ReviewJob): Promise<void> 
     } catch (e) {
         console.error(`${jobTag(job)}: read failure reason failed: ${err(e)}`);
     }
-    await settleCheck(env, job, "failure", m.checkFailed(reason));
+    await settleCheck(env, job, { conclusion: "failure", title: m.checkFailed(reason) });
     try {
         const api = new PullRequestApi(await client(env, job), job.owner, job.repo);
         await api.comment(job.number, m.failureComment(job.headSha, clamp(reason, 300)));
