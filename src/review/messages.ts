@@ -89,12 +89,12 @@ const en: Messages = {
     unknownFailure: "see the Worker logs",
     failureComment: (headSha, reason) =>
         [
-            "⚠️ **CodeSeer failed this round** and produced no findings.",
+            "⚠️ **CodeSeer did not finish this round.**",
             "",
             `- commit: \`${headSha.slice(0, 7)}\``,
             `- reason: \`${reason}\``,
             "",
-            "Retries are exhausted; push a new commit to trigger another review.",
+            "Retries are exhausted; push a new commit to trigger another review. Any findings already posted for this commit may be incomplete.",
         ].join("\n"),
 };
 
@@ -141,12 +141,12 @@ const zhCN: Messages = {
     unknownFailure: "原因见 Worker 日志",
     failureComment: (headSha, reason) =>
         [
-            "⚠️ **CodeSeer 本轮审查失败**，未产出意见。",
+            "⚠️ **CodeSeer 本轮审查未正常结束。**",
             "",
             `- commit：\`${headSha.slice(0, 7)}\``,
             `- 原因：\`${reason}\``,
             "",
-            "重试已用尽，推新 commit 可重新触发。",
+            "重试已用尽，推新 commit 可重新触发。本轮若已留下评论，可能并不完整。",
         ].join("\n"),
 };
 

@@ -37,6 +37,11 @@ describe("composeCheckTitle", () => {
     it("says nothing was reviewable instead of reporting zero findings", () => {
         expect(composeCheckTitle({ ...base, nothingToReview: true, approved: true }, MESSAGES["zh-CN"])).toBe("本轮无可审查改动，已批准");
     });
+
+    it("keeps last round's open findings visible when nothing was reviewable", () => {
+        const input = { ...base, nothingToReview: true, previousTotal: 2, pending: 2 };
+        expect(composeCheckTitle(input, MESSAGES["zh-CN"])).toBe("本轮无可审查改动，上轮处理 0 条、待处理 2 条");
+    });
 });
 
 describe("clamp", () => {

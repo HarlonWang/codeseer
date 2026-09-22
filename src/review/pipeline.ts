@@ -76,7 +76,15 @@ export async function runReview(job: ReviewJob, env: Env): Promise<ReviewOutcome
         await saveState(env.STATE, key, { lastReviewedSha: job.headSha, findings: carried });
         return {
             checkTitle: composeCheckTitle(
-                { findings: 0, previousTotal: 0, resolved: 0, pending: 0, skipped: skipped.length, approved: event === "APPROVE", nothingToReview: true },
+                {
+                    findings: 0,
+                    previousTotal: carried.length,
+                    resolved: 0,
+                    pending: carried.length,
+                    skipped: skipped.length,
+                    approved: event === "APPROVE",
+                    nothingToReview: true,
+                },
                 m,
             ),
         };
