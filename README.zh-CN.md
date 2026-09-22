@@ -19,11 +19,12 @@
 - 喂改动文件的全文，改动标记铺在全文上，改动行之外的问题也审得出来
 - push 新 commit 只审增量，上一轮意见被模型确认修掉的自动 resolve
 - 没有 high、medium 级意见且没有跳过的文件时批准（approve）PR，否则只留评论，不会 request changes
+- 审查状态回报到 PR 的 checks 区：一个 `CodeSeer review` 检查项，成功时绿灯并带一行结果摘要，跳过时灰色，失败时红灯并写明原因；失败的那轮另发一条评论，不会静默
 - 审查评论默认英文，`REVIEW_LANGUAGE` 可切成简体中文
 
 ## 部署
 
-1. 建一个 GitHub App：订阅 `pull_request` 事件，权限给 Pull requests（读写）、Contents（读写，resolve thread 需要）、Metadata（读）。生成私钥和 webhook secret
+1. 建一个 GitHub App：订阅 `pull_request` 事件，权限给 Pull requests（读写）、Contents（读写，resolve thread 需要）、Checks（读写，回报状态检查项需要）、Metadata（读）。生成私钥和 webhook secret
 2. 在 `wrangler.toml` 里填 `GITHUB_APP_ID` 和 `ALLOWED_OWNERS`（要审哪些账号/组织的仓库），再设三样 secret：
 
    ```bash
@@ -69,6 +70,8 @@ npx wrangler queues purge codeseer-review-dlq                       # 清理死�
 ```
 
 想让某个 PR 重审整个 diff：删掉它的 KV 记录后 push 一个 commit。
+
+红灯的 `CodeSeer review` 检查项标题里写着失败原因，同样的原因也会发成一条 PR 评论，堆栈在 Worker 日志里。这个检查项只报告不拦合并，别把它设成 required。
 
 ## 设计
 

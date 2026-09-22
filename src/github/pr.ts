@@ -98,6 +98,10 @@ export class PullRequestApi {
         return { nodeId: review.node_id };
     }
 
+    async comment(number: number, body: string): Promise<void> {
+        await this.gh.rest("POST", `${this.base}/issues/${number}/comments`, { body: { body } });
+    }
+
     async listReviewThreads(number: number): Promise<ReviewThread[]> {
         const out: ReviewThread[] = [];
         let after: string | null = null;

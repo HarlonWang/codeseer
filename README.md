@@ -19,11 +19,12 @@ Runs on Cloudflare Workers, reviews with OpenAI.
 - Reads the full content of changed source files, with the diff marked on top, so problems outside the changed lines are caught
 - On new commits, reviews only the increment and resolves earlier threads the model confirms as fixed
 - Approves the PR when there are no high or medium findings and no skipped files; otherwise leaves a comment. It never requests changes
+- Reports itself in the PR's checks section: a `CodeSeer review` check run that turns green with a one-line tally, grey when the round was skipped, or red with the reason when the review failed. A failed round also gets a comment, so nothing fails silently
 - Review comments are written in English by default; `REVIEW_LANGUAGE` switches them to Simplified Chinese
 
 ## Deploy
 
-1. Create a GitHub App: subscribe to the `pull_request` event, grant Pull requests (read & write), Contents (read & write, required by thread resolving) and Metadata (read). Generate a private key and a webhook secret
+1. Create a GitHub App: subscribe to the `pull_request` event, grant Pull requests (read & write), Contents (read & write, required by thread resolving), Checks (read & write, for the status check) and Metadata (read). Generate a private key and a webhook secret
 2. In `wrangler.toml`, fill in `GITHUB_APP_ID` and `ALLOWED_OWNERS` (the users or orgs whose PRs get reviewed), then set the three secrets:
 
    ```bash
@@ -69,6 +70,8 @@ npx wrangler queues purge codeseer-review-dlq                       # clear the 
 ```
 
 To force a full re-review of a PR, delete its KV record and push a commit.
+
+A red `CodeSeer review` check carries the failure reason in its title, and the same reason is posted as a PR comment; the Worker logs hold the stack trace. The check run never blocks a merge — do not mark it required.
 
 ## Design
 

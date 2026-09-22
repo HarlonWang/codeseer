@@ -134,3 +134,21 @@ export function composeNoReviewBody(input: { verdict?: Verdict; skipped: Skipped
     parts.push(`<sub>${m.upTo(input.headSha.slice(0, 7))}</sub>`);
     return parts.join("\n\n");
 }
+
+export interface CheckTitleInput {
+    findings: number;
+    previousTotal: number;
+    resolved: number;
+    pending: number;
+    skipped: number;
+    approved: boolean;
+    nothingToReview: boolean;
+}
+
+export function composeCheckTitle(input: CheckTitleInput, m: Messages): string {
+    const parts = [input.nothingToReview ? m.checkNothing : m.checkFindings(input.findings)];
+    if (input.previousTotal > 0) parts.push(m.checkPrevious(input.resolved, input.pending));
+    if (input.skipped > 0) parts.push(m.skippedCount(input.skipped));
+    if (input.approved) parts.push(m.checkApproved);
+    return parts.join(m.checkSep);
+}

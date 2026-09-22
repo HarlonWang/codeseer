@@ -31,6 +31,19 @@ export interface Messages {
     binaryAsset: string;
     generatedDir: string;
     generatedFile: string;
+    checkSep: string;
+    checkStarted: string;
+    checkNothing: string;
+    checkFindings: (n: number) => string;
+    checkPrevious: (resolved: number, pending: number) => string;
+    checkApproved: string;
+    checkFailed: (reason: string) => string;
+    checkDropped: string;
+    skipNotOpen: string;
+    skipHeadMoved: string;
+    skipAlreadyReviewed: string;
+    unknownFailure: string;
+    failureComment: (headSha: string, reason: string) => string;
 }
 
 const en: Messages = {
@@ -62,6 +75,27 @@ const en: Messages = {
     binaryAsset: "binary asset",
     generatedDir: "generated or third-party directory",
     generatedFile: "generated file",
+    checkSep: ", ",
+    checkStarted: "Reviewing",
+    checkNothing: "nothing reviewable this round",
+    checkFindings: (n) => (n === 0 ? "no findings" : `${n} finding${n === 1 ? "" : "s"}`),
+    checkPrevious: (resolved, pending) => `last round: ${resolved} resolved, ${pending} still open`,
+    checkApproved: "approved",
+    checkFailed: (reason) => `review failed: ${reason}`,
+    checkDropped: "delivery failed, review never started",
+    skipNotOpen: "PR is no longer open",
+    skipHeadMoved: "head moved on",
+    skipAlreadyReviewed: "commit already reviewed",
+    unknownFailure: "see the Worker logs",
+    failureComment: (headSha, reason) =>
+        [
+            "⚠️ **CodeSeer did not finish this round.**",
+            "",
+            `- commit: \`${headSha.slice(0, 7)}\``,
+            `- reason: \`${reason}\``,
+            "",
+            "Retries are exhausted; push a new commit to trigger another review. Any findings already posted for this commit may be incomplete.",
+        ].join("\n"),
 };
 
 const zhCN: Messages = {
@@ -93,6 +127,27 @@ const zhCN: Messages = {
     binaryAsset: "二进制资源",
     generatedDir: "生成或第三方目录",
     generatedFile: "生成文件",
+    checkSep: "，",
+    checkStarted: "审查中",
+    checkNothing: "本轮无可审查改动",
+    checkFindings: (n) => (n === 0 ? "无意见" : `${n} 条意见`),
+    checkPrevious: (resolved, pending) => `上轮处理 ${resolved} 条、待处理 ${pending} 条`,
+    checkApproved: "已批准",
+    checkFailed: (reason) => `审查失败：${reason}`,
+    checkDropped: "投递失败，审查未启动",
+    skipNotOpen: "PR 已关闭",
+    skipHeadMoved: "head 已推进",
+    skipAlreadyReviewed: "该 commit 已审过",
+    unknownFailure: "原因见 Worker 日志",
+    failureComment: (headSha, reason) =>
+        [
+            "⚠️ **CodeSeer 本轮审查未正常结束。**",
+            "",
+            `- commit：\`${headSha.slice(0, 7)}\``,
+            `- 原因：\`${reason}\``,
+            "",
+            "重试已用尽，推新 commit 可重新触发。本轮若已留下评论，可能并不完整。",
+        ].join("\n"),
 };
 
 export const MESSAGES: Record<Lang, Messages> = { en, "zh-CN": zhCN };
