@@ -163,6 +163,8 @@ Reviews API 一次提交：`event` 为 `COMMENT` 或 `APPROVE`（见 7.5），bo
 
 连续快速 push 会入队多条任务。consumer 在落评论前再查一次 PR 当前 head，与任务里的 `head_sha` 不一致就直接丢弃，只让最新一次落地。模型调用的费用已经花了，但评论不会重复。
 
+提交 review 之后还有两步会抛错（拉 thread id、写 KV）。队列重试整个任务，若那时 KV 里还是旧的 `last_reviewed_sha`，就会重审一遍再发一条重复评论。所以 `createReview` 一成功就先写一次 KV，拿到 thread id 后再覆盖写一次：重试撞上「该 commit 已审过」直接跳过。代价是拉 thread id 失败的那轮，本轮意见没有 thread id 可记，下一轮不跟踪它们（不会自动 resolve），但不会重复评论、也不会再花一次模型费用。
+
 ## 9. 已处理判定
 
 push 触发时：

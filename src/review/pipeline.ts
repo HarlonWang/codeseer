@@ -139,12 +139,13 @@ export async function runReview(job: ReviewJob, env: Env): Promise<ReviewOutcome
     const event = approving && verdict.approve ? "APPROVE" : "COMMENT";
     const review = await api.createReview(job.number, job.headSha, body, comments, event);
 
+    // 评论已经发出去了：先把 sha 落进 KV，后面几步失败重试时才不会再审一遍、再发一条
+    const kept = [...carried, ...remapStillOpen(stillOpen, incremental)];
+    await saveState(env.STATE, key, { lastReviewedSha: job.headSha, findings: kept });
+
     const threads = (await api.listReviewThreads(job.number)).filter((t) => t.reviewId === review.nodeId);
     const tracked = trackNewFindings(comments, threads);
-    await saveState(env.STATE, key, {
-        lastReviewedSha: job.headSha,
-        findings: [...carried, ...remapStillOpen(stillOpen, incremental), ...tracked],
-    });
+    await saveState(env.STATE, key, { lastReviewedSha: job.headSha, findings: [...kept, ...tracked] });
     console.log(`${tag}: ${event} with ${comments.length} inline, resolved ${resolved.length}, carried ${carried.length + stillOpen.length}`);
     return {
         checkTitle: composeCheckTitle(
