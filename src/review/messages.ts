@@ -6,7 +6,7 @@ export interface Messages {
     outputLanguage: string;
     severity: Record<Severity, string>;
     title: string;
-    approved: string;
+    approved: (suggestions: number) => string;
     notApproved: (reasons: string[]) => string;
     blockingNow: (n: number) => string;
     blockingPending: (n: number) => string;
@@ -50,10 +50,10 @@ const en: Messages = {
     outputLanguage: "Write in English; keep code identifiers, file names and API names as they are.",
     severity: { high: "High", medium: "Medium", low: "Low" },
     title: "## CodeSeer review",
-    approved: "**Verdict**: approved",
+    approved: (n) => (n > 0 ? `**Verdict**: approved (${n} medium finding${n === 1 ? "" : "s"} attached)` : "**Verdict**: approved"),
     notApproved: (reasons) => `**Verdict**: not approved (${reasons.join("; ")})`,
-    blockingNow: (n) => `${n} high or medium finding${n === 1 ? "" : "s"} this round`,
-    blockingPending: (n) => `${n} high or medium finding${n === 1 ? "" : "s"} from the last round still open`,
+    blockingNow: (n) => `${n} high finding${n === 1 ? "" : "s"} this round`,
+    blockingPending: (n) => `${n} high finding${n === 1 ? "" : "s"} from the last round still open`,
     skippedCount: (n) => `${n} file${n === 1 ? "" : "s"} not reviewed`,
     previous: (total, resolved, pending) => `**Last round**: ${total} finding${total === 1 ? "" : "s"}, ${resolved} resolved, ${pending} still open`,
     resolveFailed: "These were addressed but could not be marked resolved (see Worker logs); please resolve them by hand:",
@@ -102,10 +102,10 @@ const zhCN: Messages = {
     outputLanguage: "用简体中文写，代码标识符、文件名、API 名保留英文。",
     severity: { high: "严重", medium: "建议", low: "细节" },
     title: "## CodeSeer 审查",
-    approved: "**结论**：批准",
-    notApproved: (reasons) => `**结论**：不批准（${reasons.join("；")}）`,
-    blockingNow: (n) => `本轮 ${n} 条严重或建议级意见`,
-    blockingPending: (n) => `上轮 ${n} 条严重或建议级意见待处理`,
+    approved: (n) => (n > 0 ? `**结论**：批准（附 ${n} 条建议）` : "**结论**：批准"),
+    notApproved: (reasons) => `**结论**：未批准（${reasons.join("；")}）`,
+    blockingNow: (n) => `本轮 ${n} 条严重意见`,
+    blockingPending: (n) => `上轮 ${n} 条严重意见待处理`,
     skippedCount: (n) => `${n} 个文件未审查`,
     previous: (total, resolved, pending) => `**上轮意见**：${total} 条，已处理 ${resolved} 条，待处理 ${pending} 条`,
     resolveFailed: "以下意见已处理，但标记 resolved 失败（原因见 Worker 日志），请手动 resolve：",

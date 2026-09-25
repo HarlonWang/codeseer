@@ -18,7 +18,7 @@ Runs on Cloudflare Workers, reviews with OpenAI.
 - Reviews a PR when it is opened, reopened, marked ready, or gets new commits. Draft PRs and bot-authored PRs are skipped
 - Reads the full content of changed source files, with the diff marked on top, so problems outside the changed lines are caught
 - On new commits, reviews only the increment and resolves earlier threads the model confirms as fixed
-- Approves the PR when there are no high or medium findings and no skipped files; otherwise leaves a comment. It never requests changes
+- Approves the PR when there are no high findings and no skipped files (medium findings are listed but do not block); otherwise leaves a comment. It never requests changes
 - Reports itself in the PR's checks section: a `CodeSeer review` check run that turns green with a one-line tally, grey when the round was skipped, or red with the reason when the review failed. A failed round also gets a comment, so nothing fails silently
 - Review comments are written in English by default; `REVIEW_LANGUAGE` switches them to Simplified Chinese
 

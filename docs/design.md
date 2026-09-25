@@ -143,8 +143,8 @@ Reviews API 一次提交：`event` 为 `COMMENT` 或 `APPROVE`（见 7.5），bo
 
 批准判据是规则不是模型判断，三条同时满足才批准，否则 `COMMENT`：
 
-- 本轮没有 high 或 medium 级 finding（low 不拦）
-- 上轮遗留的未解决意见里没有 high 或 medium 级
+- 本轮没有 high 级 finding（medium、low 不拦，批准时结论行注明附带几条 medium）
+- 上轮遗留的未解决意见里没有 high 级
 - 本轮没有因阈值被跳过的文件（只按 diff 审的不算跳过）
 
 每一轮都重新判定：分支保护开了「Dismiss stale approvals」时新 commit 会作废旧批准，所以干净的一轮要重新批准；反过来批准过之后又出现阻塞级意见，只是不再续票，不撤销、不发 `REQUEST_CHANGES`。撤销动作误判代价高，而不续票没有副作用。没有需要审的代码时（只碰了忽略文件或全被阈值跳过）不调模型，但仍按判据发一条只有结论的 review：能批准就 `APPROVE`；有跳过文件就 `COMMENT` 列出原因；两者都不是则不发。

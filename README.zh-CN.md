@@ -18,7 +18,7 @@
 - PR 打开、重开、草稿转正式或 push 新 commit 时审查。草稿 PR 和机器人发起的 PR 不审
 - 喂改动文件的全文，改动标记铺在全文上，改动行之外的问题也审得出来
 - push 新 commit 只审增量，上一轮意见被模型确认修掉的自动 resolve
-- 没有 high、medium 级意见且没有跳过的文件时批准（approve）PR，否则只留评论，不会 request changes
+- 没有 high 级意见且没有跳过的文件时批准（approve）PR（medium 级照常列出，不拦批准），否则只留评论，不会 request changes
 - 审查状态回报到 PR 的 checks 区：一个 `CodeSeer review` 检查项，成功时绿灯并带一行结果摘要，跳过时灰色，失败时红灯并写明原因；失败的那轮另发一条评论，不会静默
 - 审查评论默认英文，`REVIEW_LANGUAGE` 可切成简体中文
 

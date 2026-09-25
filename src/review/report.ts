@@ -7,7 +7,7 @@ import type { SkippedFile } from "./select";
 const SEVERITY_RANK: Record<Severity, number> = { high: 2, medium: 1, low: 0 };
 
 function isBlocking(severity: Severity | undefined): boolean {
-    return severity !== "low";
+    return severity === undefined || severity === "high";
 }
 
 export interface ValidFinding extends ModelFinding {
@@ -51,6 +51,7 @@ export function toReviewComments(findings: ValidFinding[], m: Messages): Severit
 export interface Verdict {
     approve: boolean;
     reasons: string[];
+    suggestions: number;
 }
 
 export function decideVerdict(input: { findings: ModelFinding[]; pending: TrackedFinding[]; skipped: SkippedFile[] }, m: Messages): Verdict {
@@ -60,7 +61,10 @@ export function decideVerdict(input: { findings: ModelFinding[]; pending: Tracke
     if (blockingNow > 0) reasons.push(m.blockingNow(blockingNow));
     if (blockingPending > 0) reasons.push(m.blockingPending(blockingPending));
     if (input.skipped.length > 0) reasons.push(m.skippedCount(input.skipped.length));
-    return { approve: reasons.length === 0, reasons };
+    const suggestions =
+        input.findings.filter((f) => f.comment.trim() && f.severity === "medium").length +
+        input.pending.filter((f) => f.severity === "medium").length;
+    return { approve: reasons.length === 0, reasons, suggestions };
 }
 
 export interface ReportInput {
@@ -85,7 +89,7 @@ function excerpt(s: string, n = 80): string {
 }
 
 function verdictLine(v: Verdict, m: Messages): string {
-    return v.approve ? m.approved : m.notApproved(v.reasons);
+    return v.approve ? m.approved(v.suggestions) : m.notApproved(v.reasons);
 }
 
 export function composeReviewBody(input: ReportInput, m: Messages): string {
