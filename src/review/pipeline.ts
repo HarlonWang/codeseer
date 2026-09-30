@@ -60,7 +60,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<ReviewOutcome
     const limits = limitsOf(env);
     const scope = incremental ?? fullFiles;
     const sources = await fetchSources(api, scope.filter((f) => wantsSource(f, limits, m)), job.headSha, tag);
-    const { selected, skipped, degraded } = selectFiles(scope, limits, m, sources);
+    const { selected, ignored, skipped, degraded } = selectFiles(scope, limits, m, sources);
 
     const { carried, toJudge } = await splitPreviousFindings(api, job.number, state?.findings ?? [], incremental);
 
@@ -69,7 +69,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<ReviewOutcome
         const verdict = decideVerdict({ findings: [], pending: carried, skipped }, m);
         const event = approving && verdict.approve ? "APPROVE" : "COMMENT";
         if (event === "APPROVE" || skipped.length > 0) {
-            const body = composeNoReviewBody({ verdict: approving ? verdict : undefined, skipped, headSha: job.headSha }, m);
+            const body = composeNoReviewBody({ verdict: approving ? verdict : undefined, ignored, skipped, headSha: job.headSha }, m);
             await api.createReview(job.number, job.headSha, body, [], event);
         }
         console.log(`${tag}: nothing to review (${mode}), ${event}`);
@@ -132,6 +132,7 @@ export async function runReview(job: ReviewJob, env: Env): Promise<ReviewOutcome
         resolveFailed,
         carried,
         overflow,
+        ignored,
         skipped,
         degraded,
     }, m);

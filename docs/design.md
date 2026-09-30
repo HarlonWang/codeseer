@@ -145,9 +145,9 @@ Reviews API 一次提交：`event` 为 `COMMENT` 或 `APPROVE`（见 7.5），bo
 
 - 本轮没有 high 级 finding（medium、low 不拦，批准时结论行注明附带几条 medium）
 - 上轮遗留的未解决意见里没有 high 级
-- 本轮没有因阈值被跳过的文件（只按 diff 审的不算跳过）
+- 本轮没有因阈值被跳过的文件（只按 diff 审的不算跳过；lock、二进制、生成代码这类按规则不审的文件也不算，它们单独列在「按规则不审的文件」下，不是漏审）
 
-每一轮都重新判定：分支保护开了「Dismiss stale approvals」时新 commit 会作废旧批准，所以干净的一轮要重新批准；反过来批准过之后又出现阻塞级意见，只是不再续票，不撤销、不发 `REQUEST_CHANGES`。撤销动作误判代价高，而不续票没有副作用。没有需要审的代码时（只碰了忽略文件或全被阈值跳过）不调模型，但仍按判据发一条只有结论的 review：能批准就 `APPROVE`；有跳过文件就 `COMMENT` 列出原因；两者都不是则不发。
+每一轮都重新判定：分支保护开了「Dismiss stale approvals」时新 commit 会作废旧批准，所以干净的一轮要重新批准；反过来批准过之后又出现阻塞级意见，只是不再续票，不撤销、不发 `REQUEST_CHANGES`。撤销动作误判代价高，而不续票没有副作用。没有需要审的代码时（只碰了忽略文件或全被阈值跳过）不调模型，但仍按判据发一条只有结论的 review：能批准就 `APPROVE`；有因阈值跳过的文件就 `COMMENT` 列出原因；两者都不是（比如只碰了 lock 文件而批准又关着）则不发。
 
 `wrangler.toml` 的 `APPROVE_ENABLED` 控制开关；关闭时判据不参与，review 一律 `COMMENT`，summary 也不写结论行。
 

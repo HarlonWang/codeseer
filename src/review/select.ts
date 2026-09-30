@@ -16,16 +16,19 @@ export interface SkippedFile {
 
 export interface Selection {
     selected: SelectedFile[];
+    ignored: SkippedFile[];
     skipped: SkippedFile[];
     degraded: SkippedFile[];
 }
 
 const DIFF_ONLY = /\.(md|txt|xml|json|ya?ml|toml|properties|svg|csv|html?)$/i;
 
+// 规则上不审的文件不算漏审、不拦批准，判据见 docs/design.md
+function ignoredReason(file: DiffFile, m: Messages): string | null {
+    return ignoreReason(file.path, m) ?? (file.binary ? m.binary : null);
+}
+
 function skipReason(file: DiffFile, limits: Limits, m: Messages): string | null {
-    const ignored = ignoreReason(file.path, m);
-    if (ignored) return ignored;
-    if (file.binary) return m.binary;
     const changed = changedLineCount(file);
     if (changed > limits.maxFileDiffLines) return m.diffTooLarge(limits.maxFileDiffLines, changed);
     return null;
@@ -34,7 +37,7 @@ function skipReason(file: DiffFile, limits: Limits, m: Messages): string | null 
 export function wantsSource(file: DiffFile, limits: Limits, m: Messages): boolean {
     if (file.status !== "modified" && file.status !== "renamed") return false;
     if (file.hunks.length === 0 || DIFF_ONLY.test(file.path)) return false;
-    return skipReason(file, limits, m) === null;
+    return ignoredReason(file, m) === null && skipReason(file, limits, m) === null;
 }
 
 interface Candidate {
@@ -46,8 +49,14 @@ interface Candidate {
 
 export function selectFiles(files: DiffFile[], limits: Limits, m: Messages, sources: Map<string, string> = new Map()): Selection {
     const candidates: Candidate[] = [];
+    const ignored: SkippedFile[] = [];
     const skipped: SkippedFile[] = [];
     for (const file of files) {
+        const ignore = ignoredReason(file, m);
+        if (ignore) {
+            ignored.push({ path: file.path, reason: ignore });
+            continue;
+        }
         const reason = skipReason(file, limits, m);
         if (reason) {
             skipped.push({ path: file.path, reason });
@@ -92,5 +101,5 @@ export function selectFiles(files: DiffFile[], limits: Limits, m: Messages, sour
         if (degrade) degraded.push({ path: c.file.path, reason: m.budgetExceeded });
         else if (c.richMissing) degraded.push({ path: c.file.path, reason: c.richMissing });
     }
-    return { selected, skipped, degraded };
+    return { selected, ignored, skipped, degraded };
 }

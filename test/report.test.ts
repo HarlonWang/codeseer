@@ -84,16 +84,38 @@ describe("decideVerdict", () => {
     });
 });
 
+describe("ignored files and the verdict", () => {
+    it("does not block approval when only lock files were left out", () => {
+        const lock = ["diff --git a/package-lock.json b/package-lock.json", "--- a/package-lock.json", "+++ b/package-lock.json", "@@ -0,0 +1 @@", "+x"].join("\n");
+        const { selected, ignored, skipped } = selectFiles(parseDiff(`${lock}\n`), limits({}), zh);
+        expect(selected).toEqual([]);
+        expect(skipped).toEqual([]);
+        expect(ignored).toEqual([{ path: "package-lock.json", reason: "lock 文件" }]);
+        expect(decideVerdict({ findings: [], pending: [], skipped }, zh)).toEqual({ approve: true, reasons: [], suggestions: 0 });
+    });
+
+    it("lists ignored files under their own heading in both bodies", () => {
+        const ignored = [{ path: "package-lock.json", reason: "lock 文件" }];
+        const none = composeNoReviewBody({ verdict: { approve: true, reasons: [], suggestions: 0 }, ignored, skipped: [], headSha: "bbbbbbb2" }, zh);
+        expect(none).toContain("**结论**：批准");
+        expect(none).toContain("### 按规则不审的文件\n- `package-lock.json`：lock 文件");
+        expect(none).not.toContain("### 跳过的文件");
+        const base = { mode: "full" as const, fromSha: null, headSha: "bbbbbbb2", model: "m", summary: "s", judged: [], resolved: [], resolveFailed: [], carried: [], overflow: [], degraded: [] };
+        const body = composeReviewBody({ ...base, ignored, skipped: [{ path: "huge.kt", reason: "太大" }] }, zh);
+        expect(body.indexOf("### 跳过的文件")).toBeLessThan(body.indexOf("### 按规则不审的文件"));
+    });
+});
+
 describe("composeNoReviewBody", () => {
     it("states the approval and scope", () => {
-        const body = composeNoReviewBody({ verdict: { approve: true, reasons: [], suggestions: 0 }, skipped: [], headSha: "bbbbbbb2" }, zh);
+        const body = composeNoReviewBody({ verdict: { approve: true, reasons: [], suggestions: 0 }, ignored: [], skipped: [], headSha: "bbbbbbb2" }, zh);
         expect(body).toContain("**结论**：批准");
         expect(body).not.toContain("### 跳过的文件");
         expect(body).toContain("至 bbbbbbb<");
     });
 
     it("lists skipped files with the refusal reason", () => {
-        const body = composeNoReviewBody({ verdict: { approve: false, reasons: ["1 个文件未审查"], suggestions: 0 }, skipped: [{ path: "huge.kt", reason: "太大" }], headSha: "bbbbbbb2" }, zh);
+        const body = composeNoReviewBody({ verdict: { approve: false, reasons: ["1 个文件未审查"], suggestions: 0 }, ignored: [], skipped: [{ path: "huge.kt", reason: "太大" }], headSha: "bbbbbbb2" }, zh);
         expect(body).toContain("**结论**：未批准（1 个文件未审查）");
         expect(body).toContain("- `huge.kt`：太大");
     });
@@ -113,7 +135,8 @@ describe("composeReviewBody", () => {
             resolveFailed: judged,
             carried: [{ threadId: "t2", path: "b.ts", line: 5, comment: "still open" }],
             overflow: [{ path: "c.ts", line: 99, severity: "medium", comment: "somewhere" }],
-            skipped: [{ path: "package-lock.json", reason: "lock 文件" }],
+            ignored: [{ path: "package-lock.json", reason: "lock 文件" }],
+            skipped: [{ path: "huge.kt", reason: "太大" }],
             degraded: [{ path: "big.kt", reason: "本次审查总量已达上限" }],
         }, zh);
         expect(body).toContain("**上轮意见**：2 条，已处理 1 条，待处理 1 条");
@@ -121,7 +144,8 @@ describe("composeReviewBody", () => {
         expect(body).toContain("标记 resolved 失败");
         expect(body).toContain("### 其他意见");
         expect(body).toContain("`c.ts:99` **[建议]** somewhere");
-        expect(body).toContain("`package-lock.json`：lock 文件");
+        expect(body).toContain("### 跳过的文件\n- `huge.kt`：太大");
+        expect(body).toContain("### 按规则不审的文件\n- `package-lock.json`：lock 文件");
         expect(body).toContain("### 只按 diff 审查的文件");
         expect(body).toContain("- `big.kt`：本次审查总量已达上限");
         expect(body).toContain("增量 aaaaaaa..bbbbbbb");
@@ -129,7 +153,7 @@ describe("composeReviewBody", () => {
     });
 
     it("prints the verdict when given", () => {
-        const base = { mode: "full" as const, fromSha: null, headSha: "bbbbbbb2", model: "m", summary: "s", judged: [], resolved: [], resolveFailed: [], carried: [], overflow: [], skipped: [], degraded: [] };
+        const base = { mode: "full" as const, fromSha: null, headSha: "bbbbbbb2", model: "m", summary: "s", judged: [], resolved: [], resolveFailed: [], carried: [], overflow: [], ignored: [], skipped: [], degraded: [] };
         expect(composeReviewBody({ ...base, verdict: { approve: true, reasons: [], suggestions: 0 } }, zh)).toContain("**结论**：批准\n");
         expect(composeReviewBody({ ...base, verdict: { approve: true, reasons: [], suggestions: 1 } }, zh)).toContain("**结论**：批准（附 1 条建议）");
         expect(composeReviewBody({ ...base, verdict: { approve: false, reasons: ["a", "b"], suggestions: 0 } }, zh)).toContain("**结论**：未批准（a；b）");
@@ -139,12 +163,13 @@ describe("composeReviewBody", () => {
 describe("review language", () => {
     it("renders the whole report in English when REVIEW_LANGUAGE is en", () => {
         const base = { mode: "full" as const, fromSha: null, headSha: "bbbbbbb2", model: "m", summary: "s", judged: [], resolved: [], resolveFailed: [], carried: [], overflow: [], degraded: [] };
-        const skipped = [{ path: "package-lock.json", reason: ignoreReason("package-lock.json", en)! }];
+        const ignored = [{ path: "package-lock.json", reason: ignoreReason("package-lock.json", en)! }];
+        const skipped = [{ path: "huge.kt", reason: en.budgetExceeded }];
         const verdict = decideVerdict({ findings: [{ path: "a.ts", line: 1, severity: "high", comment: "x" }], pending: [], skipped }, en);
-        const body = composeReviewBody({ ...base, skipped, verdict }, en);
+        const body = composeReviewBody({ ...base, ignored, skipped, verdict }, en);
         expect(body).toContain("## CodeSeer review");
         expect(body).toContain("**Verdict**: not approved (1 high finding this round; 1 file not reviewed)");
-        expect(body).toContain("- `package-lock.json`: lock file");
+        expect(body).toContain("### Not reviewed by rule\n- `package-lock.json`: lock file");
         expect(body).toContain("whole PR up to bbbbbbb");
         expect(body).not.toMatch(/[\u4e00-\u9fa5]/);
         expect(systemPrompt(en)).toContain("Write in English");

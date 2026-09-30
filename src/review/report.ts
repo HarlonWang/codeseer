@@ -78,6 +78,7 @@ export interface ReportInput {
     resolveFailed: TrackedFinding[];
     carried: TrackedFinding[];
     overflow: ModelFinding[];
+    ignored: SkippedFile[];
     skipped: SkippedFile[];
     degraded: SkippedFile[];
     verdict?: Verdict;
@@ -115,10 +116,7 @@ export function composeReviewBody(input: ReportInput, m: Messages): string {
         const lines = input.degraded.map((d) => m.item(d.path, d.reason));
         parts.push(`${m.degraded}\n${lines.join("\n")}`);
     }
-    if (input.skipped.length > 0) {
-        const lines = input.skipped.map((s) => m.item(s.path, s.reason));
-        parts.push(`${m.skipped}\n${lines.join("\n")}`);
-    }
+    parts.push(...fileLists(input, m));
     const scope =
         input.mode === "full"
             ? m.scopeFull(input.headSha.slice(0, 7))
@@ -127,14 +125,17 @@ export function composeReviewBody(input: ReportInput, m: Messages): string {
     return parts.join("\n\n");
 }
 
-export function composeNoReviewBody(input: { verdict?: Verdict; skipped: SkippedFile[]; headSha: string }, m: Messages): string {
+function fileLists(input: { ignored: SkippedFile[]; skipped: SkippedFile[] }, m: Messages): string[] {
+    const parts: string[] = [];
+    if (input.skipped.length > 0) parts.push(`${m.skipped}\n${input.skipped.map((s) => m.item(s.path, s.reason)).join("\n")}`);
+    if (input.ignored.length > 0) parts.push(`${m.ignored}\n${input.ignored.map((s) => m.item(s.path, s.reason)).join("\n")}`);
+    return parts;
+}
+
+export function composeNoReviewBody(input: { verdict?: Verdict; ignored: SkippedFile[]; skipped: SkippedFile[]; headSha: string }, m: Messages): string {
     const parts: string[] = [m.title];
     if (input.verdict) parts.push(verdictLine(input.verdict, m));
-    parts.push(m.nothingToReview);
-    if (input.skipped.length > 0) {
-        const lines = input.skipped.map((s) => m.item(s.path, s.reason));
-        parts.push(`${m.skipped}\n${lines.join("\n")}`);
-    }
+    parts.push(m.nothingToReview, ...fileLists(input, m));
     parts.push(`<sub>${m.upTo(input.headSha.slice(0, 7))}</sub>`);
     return parts.join("\n\n");
 }

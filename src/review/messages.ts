@@ -17,6 +17,7 @@ export interface Messages {
     overflow: string;
     degraded: string;
     skipped: string;
+    ignored: string;
     scopeFull: (head: string) => string;
     scopeIncremental: (from: string, head: string) => string;
     nothingToReview: string;
@@ -61,6 +62,7 @@ const en: Messages = {
     overflow: "### Other findings\nNot on a changed line, so they cannot be inline comments:",
     degraded: "### Files reviewed by diff only",
     skipped: "### Skipped files",
+    ignored: "### Not reviewed by rule",
     scopeFull: (head) => `whole PR up to ${head}`,
     scopeIncremental: (from, head) => `increment ${from}..${head}`,
     nothingToReview: "Nothing reviewable in this round of changes.",
@@ -113,6 +115,7 @@ const zhCN: Messages = {
     overflow: "### 其他意见\n不在改动行上，无法挂为行内评论：",
     degraded: "### 只按 diff 审查的文件",
     skipped: "### 跳过的文件",
+    ignored: "### 按规则不审的文件",
     scopeFull: (head) => `整个 PR 至 ${head}`,
     scopeIncremental: (from, head) => `增量 ${from}..${head}`,
     nothingToReview: "本轮改动没有可审查的代码。",
